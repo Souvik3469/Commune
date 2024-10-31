@@ -6,8 +6,10 @@ import bcrypt from "bcrypt";
 import createError from "http-errors";
 import ms from "ms";
 import { customResponse } from "../../../utils/Response";
+import { genOtp, sendEmail } from "../../utils/utils";
 
 const prisma = new PrismaClient();
+
 const loginController = {
   async login(req, res, next) {
     try {
@@ -53,7 +55,62 @@ const loginController = {
       return next(createError.InternalServerError());
     }
   },
+  async sendOTP(req, res, next) {
+    try {
+      const { email } = req.query;
+      console.log(email, "email");
+      const otp = genOtp();
+      console.log(otp, "otp");
+      const newOTP = await prisma.otp.create({
+        data: {
+          email: email,
+          otp: otp,
+        },
+      });
+      console.log(email);
+      // Send OTP via email
+      await sendEmail(
+        email,
+        "h",
+        `<p>Your OTP is: <strong>${otp}</strong></p>`
+      );
 
+      res.status(200).json({ success: true, message: "OTP sent successfully" });
+    } catch (error) {
+      console.error("Error sending OTP:", error);
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async verifyOtp(req, res, next) {
+    try {
+      const { email } = req.query;
+      const { otp } = req.body;
+      const existingOTP = await prisma.otp.findFirst({
+        where: {
+          email,
+          otp,
+        },
+      });
+      if (existingOTP) {
+        await prisma.otp.delete({
+          where: {
+            id: existingOTP.id,
+          },
+        });
+
+        res
+          .status(200)
+          .json({ success: true, message: "OTP verification successful" });
+      } else {
+        // OTP is invalid
+        res.status(400).json({ success: false, error: "Invalid OTP" });
+      }
+    } catch (error) {
+      console.error("Error verifying OTP:", error);
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
   async register(req, res, next) {
     try {
       const resp = await req.body;
@@ -78,6 +135,7 @@ const loginController = {
         data: {
           email: resp.email,
           name: resp.name,
+          gender: resp.gender,
           password: hashedPassword,
         },
       });
@@ -96,3 +154,10 @@ const loginController = {
   },
 };
 export default loginController;
+
+// api -> redirect url client-secret diye
+// after auth
+// localstorage --> auth_type = google
+
+// auth_type to backend  -> google + token
+// deligated credentials -> user data

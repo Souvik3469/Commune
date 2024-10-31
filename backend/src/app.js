@@ -5,11 +5,13 @@ import helmet from "helmet";
 import createError from "http-errors";
 import morgan from "morgan";
 import path from "path";
-
+import session from "express-session";
 import "./v1/config/env.config";
-
+import passport from "passport";
 import { authRoutes, chatRoute, userRoute } from "./v1/routes";
-
+import { Passport } from "passport";
+import cloudinary from "cloudinary";
+const router = express.Router();
 // const openai = new OpenAI({
 //   apiKey: process.env.OPENAI_API_KEY, // This is also the default, can be omitted
 // });
@@ -34,13 +36,29 @@ const corsOptions = {
   optionSuccessStatus: 200,
 };
 
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 const app = express();
 app.use(cors(corsOptions));
 // Global variable appRoot with base dirname
 global.appRoot = path.resolve(__dirname);
-
+app.use(
+  session({
+    resave: false,
+    saveUninitialized: true,
+    secret: "chatapp",
+  })
+);
 // Middlewares
+
 app.use(helmet());
+app.use(passport.authenticate("session"));
+app.use(passport.initialize());
+app.use(passport.session());
+
 app.set("trust proxy", 1);
 app.use(limiter);
 app.use(express.json());
@@ -60,6 +78,7 @@ app.use(`/${apiVersion}/auth`, authRoutes);
 app.use(`/${apiVersion}/user`, userRoute);
 app.use(`/${apiVersion}/chat`, chatRoute);
 
+
 // // 404 Handler
 app.use((req, res, next) => {
   next(createError.NotFound());
@@ -73,9 +92,16 @@ app.use((err, req, res, next) => {
     message: err.message,
   });
 });
+router.get("/success", (req, res) => {
+  const { user, accessToken } = req.user;
+  console.log(user, "user");
+  console.log(accessToken, "Accesstoken");
+});
 
+// failure
+// router.get("/failure", userController.failureGoogleLogin);
 // Server Configs
-const PORT = process.env.PORT || 5000;
+const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`🚀 @ http://localhost:${PORT}`);
   console.log(`connected to ${process.env.DATABASE_URL}`);
