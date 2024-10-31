@@ -49,7 +49,7 @@ app.use(
   session({
     resave: false,
     saveUninitialized: true,
-    secret: "chatapp",
+    secret: "ankush",
   })
 );
 // Middlewares
@@ -77,7 +77,6 @@ const apiVersion = "v1";
 app.use(`/${apiVersion}/auth`, authRoutes);
 app.use(`/${apiVersion}/user`, userRoute);
 app.use(`/${apiVersion}/chat`, chatRoute);
-
 
 // // 404 Handler
 app.use((req, res, next) => {

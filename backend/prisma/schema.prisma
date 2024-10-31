@@ -14,26 +14,19 @@ model User {
     name        String
     email       String
     password    String
-    dob         DateTime?
-    active      Boolean   @default(false)
     gender      String?
     googleId    String?
     profilePic  String?
-    
     createdAt   DateTime  @default(now())
     bio         String?
     updatedAt   DateTime  @updatedAt
-
     messages    Message[]
     phoneNumber String?
     chats       Chat[]    @relation(fields: [chatIds], references: [id])
     chatIds     String[]  @db.ObjectId
     groupChats  Chat[]    @relation("GroupChats")
 
-
 }
-
-
 
 model Chat {
     id           String        @id @default(auto()) @map("_id") @db.ObjectId
@@ -73,4 +66,3 @@ model InviteToken {
     expiresAt DateTime
     createdAt DateTime @default(now())
 }
-
