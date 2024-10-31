@@ -6,4 +6,5 @@ const router = express.Router();
 router.get("/user-details", authMiddleware, userController.userDetails);
 router.patch("/profile", authMiddleware, userController.SelectTopic);
 router.post("/uploadImage", userController.uploadImage);
+router.get("/search",authMiddleware, userController.searchUsers);
 export default router;

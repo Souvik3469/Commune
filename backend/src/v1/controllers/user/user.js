@@ -71,89 +71,38 @@ const userController = {
     }
   },
 
-  async SelectTopic(req, res, next) {
+  
+  async searchUsers(req, res, next) {
     try {
-      const userId = req.user.id;
-      const {
-        phoneNumber,
-        titles,
-        bio,
-        gender,
-        collegeName,
-        state,
-        city,
-        stream,
-        yearofstudy,
-        kyc,
-        collegeID,
-        dob,
-        profilePic,
-      } = req.body;
+        const { query } = req.query;
 
-      console.log(titles);
-      console.log(bio, "bio");
+        if (!query) {
+            return res.status(400).json({ error: "Search query is required" });
+        }
 
-      const updateData = {};
-
-      if (bio) updateData.bio = bio;
-      if (gender) updateData.gender = gender;
-      if(dob) updateData.dob=dob
-      if (stream) updateData.stream = stream;
-      if (yearofstudy) updateData.yearofstudy = yearofstudy;
-      if (state) updateData.state = state;
-      if (collegeID) updateData.collegeId = collegeID;
-      if (kyc) updateData.kyc = kyc;
-      if (profilePic) updateData.profilePic = profilePic;
-      if (city) updateData.city = city;
-      if (collegeName) updateData.collegeName = collegeName;
-      if(phoneNumber) updateData.phoneNumber=phoneNumber
-
-      const user = await prisma.user.findFirst({
-        where: {
-          id: userId,
-        },
-      });
-
-      if (user) {
-        await prisma.user.update({
-          where: {
-            id: userId,
-          },
-          data: updateData,
-        });
-        await prisma.user.update({
-          where: {
-            id:userId
-          },
-          data:{
-            active:true
-          }
-        });
-      }
-
-      if (titles) {
-        const titlePromises = titles.map(async (title) => {
-          return await prisma.topic.create({
-            data: {
-              title: title,
-              userId: userId,
+        const users = await prisma.user.findMany({
+            where: {
+                name: {
+                    contains: query,
+                    mode: 'insensitive', 
+                },
             },
-          });
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                profilePic: true,
+                dob: true,
+            },
+            orderBy: {
+                name: 'asc',
+            },
         });
-        await Promise.all(titlePromises);
-      }
 
-      res.status(200).json({
-        message: "Profile updated",
-        success: true,
-      });
+        res.json(users);
     } catch (err) {
-      console.log(err, "err");
-      res.status(200).json({
-        message: err.message || "An error occurred",
-        success: false,
-      });
+        next(err);
     }
-  },
+}
 };
 export default userController;
