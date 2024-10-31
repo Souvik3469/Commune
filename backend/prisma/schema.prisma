@@ -10,42 +10,52 @@ datasource db {
 }
 
 model User {
-    id        String    @id @default(auto()) @map("_id") @db.ObjectId
-    name      String
-    email     String
-    password  String
-    createdAt DateTime  @default(now())
-    bio       String?
-    updatedAt DateTime  @updatedAt
-    topics    Topic[]
-    messages  Message[]
-    chats     Chat[]    @relation(fields: [chatIds], references: [id])
-    chatIds   String[]  @db.ObjectId
+    id          String    @id @default(auto()) @map("_id") @db.ObjectId
+    name        String
+    email       String
+    password    String
+    dob         DateTime?
+    active      Boolean   @default(false)
+    gender      String?
+    googleId    String?
+    profilePic  String?
+    
+    createdAt   DateTime  @default(now())
+    bio         String?
+    updatedAt   DateTime  @updatedAt
+
+    messages    Message[]
+    phoneNumber String?
+    chats       Chat[]    @relation(fields: [chatIds], references: [id])
+    chatIds     String[]  @db.ObjectId
+    groupChats  Chat[]    @relation("GroupChats")
+
+
 }
 
-model Topic {
-    id     String  @id @default(auto()) @map("_id") @db.ObjectId
-    title  String
-    user   User?   @relation(fields: [userId], references: [id])
-    userId String?
-}
+
 
 model Chat {
-    id      String   @id @default(auto()) @map("_id") @db.ObjectId
-    name    String?
-    isGroup Boolean?
-
-    messagesIds String[]  @db.ObjectId
-    messages    Message[]
-
-    userIds String[] @db.ObjectId
-    users   User[]   @relation(fields: [userIds], references: [id])
+    id           String        @id @default(auto()) @map("_id") @db.ObjectId
+    name         String?
+    isGroup      Boolean?      @default(false)
+    logo         String?
+    adminId      String?       @db.ObjectId
+    admin        User?         @relation("GroupChats", fields: [adminId], references: [id])
+    messagesIds  String[]      @db.ObjectId
+    messages     Message[]
+    lastModified DateTime
+    inviteTokens InviteToken[]
+    userIds      String[]      @db.ObjectId
+    users        User[]        @relation(fields: [userIds], references: [id])
 }
 
 model Message {
     id        String   @id @default(auto()) @map("_id") @db.ObjectId
     content   String
+    type      String   @default("text")
     timestamp DateTime @default(now())
+    logo      String?
 
     chatId String @db.ObjectId
 
@@ -54,3 +64,13 @@ model Message {
 
     chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
 }
+
+model InviteToken {
+    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    token     String   @unique
+    chatId    String
+    chat      Chat     @relation(fields: [chatId], references: [id])
+    expiresAt DateTime
+    createdAt DateTime @default(now())
+}
+
