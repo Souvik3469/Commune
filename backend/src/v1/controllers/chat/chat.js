@@ -201,11 +201,13 @@ async getChats(req, res, next) {
         if (!isUserInChat) {
             return res.status(403).json({ error: 'User is not a member of this chat' });
         }
-
-        let messageContent = content || '';
-        if (fileUrl) {
-            messageContent = messageContent ? `${messageContent}\n${fileUrl}` : fileUrl;
-        }
+        if(type!=="text" && type!=="file") return res.status(400).json({ error: 'Please enter a valid message type' });
+        let messageContent =  '';
+        if(type=="text")messageContent=content;
+        else messageContent=fileUrl
+        // if (fileUrl) {
+        //     messageContent = messageContent ? `${messageContent}\n${fileUrl}` : fileUrl;
+        // }
 
    
         const message = await prisma.message.create({
