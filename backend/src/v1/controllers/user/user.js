@@ -71,7 +71,7 @@ const userController = {
     }
   },
 
-  
+ 
   async searchUsers(req, res, next) {
     try {
         const { query } = req.query;
