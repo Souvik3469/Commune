@@ -391,6 +391,40 @@ async getChats(req, res, next) {
     next(err);
   }
 },
+async deleteChat(req, res, next) {
+    try {
+        const { chatId } = req.params;
+        const currentUserId = req.user.id;
+
+        const chat = await prisma.chat.findUnique({
+            where: { id: chatId },
+            select: {
+                isGroup: true,
+                adminId: true,
+            },
+        });
+
+        if (!chat) {
+            return res.status(404).json({ error: "Chat not found" });
+        }
+
+        if (!chat.isGroup) {
+            return res.status(400).json({ error: "This operation is only allowed for group chats" });
+        }
+
+        if (chat.adminId !== currentUserId) {
+            return res.status(403).json({ error: "You are not authorized to delete this chat" });
+        }
+
+        await prisma.chat.delete({
+            where: { id: chatId },
+        });
+
+        res.json({ message: "Group chat deleted successfully" });
+    } catch (err) {
+        next(err);
+    }
+},
 //if sending invitelink via email
 // async  sendInviteLink(req, res, next) {
 //   try {

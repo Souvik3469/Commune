@@ -19,6 +19,7 @@ model User {
     gender      String?
     googleId    String?
     profilePic  String?
+  
     createdAt   DateTime  @default(now())
     bio         String?
     updatedAt   DateTime  @updatedAt
@@ -29,14 +30,7 @@ model User {
     chatIds     String[]  @db.ObjectId
     groupChats  Chat[]    @relation("GroupChats")
 
-    Post    Post[]
-    Comment Comment[]
-
-    friends Friend[] @relation("UserFriends")
-    Friend  Friend[]
 }
-
-
 
 model Chat {
     id           String        @id @default(auto()) @map("_id") @db.ObjectId
