@@ -7,7 +7,6 @@ import {
   authRoutes,
   chatRoute,
   userRoute,
- 
 } from "./v1/routes";
 import cloudinary from "cloudinary";
 import session from "express-session";
@@ -53,16 +52,13 @@ const io = new Server(server, {
 });
 
 
-
-
-
 // Configure general middleware
 
 app.use(helmet());
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(session({ resave: false, saveUninitialized: true, secret: "ankush" }));
+app.use(session({ resave: false, saveUninitialized: true, secret: "chatapp" }));
 app.use(passport.initialize());
 app.use(passport.session());
 

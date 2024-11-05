@@ -8,4 +8,7 @@ router.patch("/profile", authMiddleware, userController.SelectTopic);
 router.post("/uploadImage", userController.uploadImage);
 router.get("/connect", authMiddleware, userController.connect);
 router.get("/search", authMiddleware, userController.searchUsers);
+router.post("/forgot/password", userController.forgotPassword);
+router.post("/verify/code",  userController.verifyResetCode);
+router.post("/reset/password",  userController.resetPassword);
 export default router;
