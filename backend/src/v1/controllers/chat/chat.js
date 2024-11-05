@@ -22,6 +22,7 @@ const chatController = {
           where: {
             username: {
               in: usernames,
+              mode: 'insensitive', 
             },
           },
         });

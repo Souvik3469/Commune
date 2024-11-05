@@ -1,4 +1,4 @@
-# duocortex-backend
+# chatapp-backend
 
 # setup
 

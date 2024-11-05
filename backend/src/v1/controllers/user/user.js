@@ -1,10 +1,11 @@
 import { PrismaClient } from "@prisma/client";
 import { customResponse } from "../../../utils/Response";
 import { Match } from "../../services/MatchingService";
+import {sendEmail} from "../../utils/sendEmail"
 const prisma = new PrismaClient();
 const AWS = require("aws-sdk");
 const S3 = new AWS.S3();
-
+import bcrypt from "bcrypt";
 AWS.config.update({
   region: process.env.AWS_REGION,
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -44,32 +45,7 @@ const userController = {
         .send({ message: "Internal Server Error", error: err.message });
     }
   },
-  async connect(req, res) {
-    try {
-      let user;
-
-      user = await prisma.user.findFirst({
-        where: {
-          id: req.user.id,
-        },
-        include: {
-          topics: true,
-        },
-      });
-      const allusers = await prisma.user.findMany();
-      const topic = await prisma.topic.findMany();
-      const users = Match(allusers, user, topic);
-
-      res.status(200).json({
-        message: "success",
-        data: users,
-      });
-    } catch (err) {
-      return res
-        .status(500)
-        .json({ message: "Internal Server Error", error: err.message });
-    }
-  },
+ 
   async getPresignUrlPromiseFunction(S3, s3Params) {
     return new Promise((resolve, reject) => {
       S3.getSignedUrl("putObject", s3Params, (err, url) => {
@@ -103,90 +79,7 @@ const userController = {
     }
   },
 
-  async SelectTopic(req, res, next) {
-    try {
-      const userId = req.user.id;
-      const {
-        phoneNumber,
-        titles,
-        bio,
-        gender,
-        collegeName,
-        state,
-        city,
-        stream,
-        yearofstudy,
-        kyc,
-        collegeID,
-        dob,
-        profilePic,
-      } = req.body;
-
-      console.log(titles, "tiles");
-      console.log(bio, "bio");
-
-      const updateData = {};
-
-      if (bio) updateData.bio = bio;
-      if (gender) updateData.gender = gender;
-      if (dob) updateData.dob = dob;
-      if (stream) updateData.stream = stream;
-      if (yearofstudy) updateData.yearofstudy = yearofstudy;
-      if (state) updateData.state = state;
-      if (collegeID) updateData.collegeId = collegeID;
-      if (kyc) updateData.kyc = kyc;
-      if (profilePic) updateData.profilePic = profilePic;
-      if (city) updateData.city = city;
-      if (collegeName) updateData.collegeName = collegeName;
-      if (phoneNumber) updateData.phoneNumber = phoneNumber;
-
-      const user = await prisma.user.findFirst({
-        where: {
-          id: userId,
-        },
-      });
-
-      if (user) {
-        await prisma.user.update({
-          where: {
-            id: userId,
-          },
-          data: updateData,
-        });
-        await prisma.user.update({
-          where: {
-            id: userId,
-          },
-          data: {
-            active: true,
-          },
-        });
-      }
-
-      if (titles) {
-        const titlePromises = titles.map(async (title) => {
-          return await prisma.topic.create({
-            data: {
-              title: title,
-              userId: userId,
-            },
-          });
-        });
-        await Promise.all(titlePromises);
-      }
-
-      res.status(200).json({
-        message: "Profile updated",
-        success: true,
-      });
-    } catch (err) {
-      console.log(err, "err");
-      res.status(200).json({
-        message: err.message || "An error occurred",
-        success: false,
-      });
-    }
-  },
+ 
   async searchUsers(req, res, next) {
     try {
         const { query } = req.query;
@@ -218,6 +111,123 @@ const userController = {
     } catch (err) {
         next(err);
     }
+},
+ async forgotPassword(req, res, next) {
+    try {
+      const { email } = req.body;
+
+   
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+   
+      const user = await prisma.user.findUnique({
+        where: { email }
+      });
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // const resetToken = crypto.randomBytes(32).toString("hex");
+
+     
+      // const resetTokenHash = crypto
+      //   .createHash("sha256")
+      //   .update(resetToken)
+      //   .digest("hex");
+
+        const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const resetPasswordExpiry = new Date(Date.now() + 15*60*1000); // 15 mins
+
+     
+      await prisma.user.update({
+        where: { email },
+        data: {
+          resetPasswordToken: resetCode,
+          resetPasswordExpiry,
+        },
+      });
+
+     
+     // const resetURL = `${process.env.DEV_URL2}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+
+     
+
+      // Send the email
+     await sendEmail(
+      email,
+      "Password Reset Request",
+      // `
+      //   <p>You requested a password reset.</p>
+      //   <p>Click the link below to reset your password:</p>
+      //   <a href="${resetURL}">${resetURL}</a>
+      //   <p>This link will expire in 15 minutes.</p>
+      // `
+       `Your password reset code is ${resetCode}. The code will expire in 15 minutes`
+
+    );
+
+      return res.status(200).json({ message: "Password reset email sent" });
+    } catch (err) {
+      console.error("Forgot Password Error:", err);
+      return res
+        .status(500)
+        .json({ message: "Internal Server Error", error: err.message });
+    }
+  },
+  async  verifyResetCode(req, res) {
+  try {
+    const { email, resetCode } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user || user.resetPasswordToken !== resetCode || user.resetPasswordExpiry < new Date()) {
+      return res.status(400).json({ message: "Invalid or expired reset code" });
+    }
+
+    
+    res.status(200).json({ message: "Code verified successfully" });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+},
+
+  async  resetPassword(req, res) {
+  try {
+    const { email, newPassword } = req.body;
+    // console.log("Pass",newPassword)
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user || !user.resetPasswordToken || user.resetPasswordExpiry < new Date()) {
+      return res.status(400).json({ message: "Invalid or expired reset code" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { email },
+      data: {
+        password: hashedPassword,
+        resetPasswordToken: null,
+        resetPasswordExpiry: null,
+      },
+    });
+
+    res.status(200).json({ message: "Password reset successful" });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 }
 };
 export default userController;
