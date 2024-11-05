@@ -59,19 +59,26 @@ const loginController = {
     try {
       const { email } = req.query;
       console.log(email, "email");
+      prisma.otp.deleteMany({
+        where: {
+          email: email,
+        },
+      });
       const otp = genOtp();
       console.log(otp, "otp");
-      const newOTP = await prisma.otp.create({
+
+      await prisma.otp.create({
         data: {
           email: email,
           otp: otp,
         },
       });
       console.log(email);
+
       // Send OTP via email
       await sendEmail(
         email,
-        "h",
+        "OTP Verification from DuoCortex",
         `<p>Your OTP is: <strong>${otp}</strong></p>`
       );
 
@@ -112,46 +119,66 @@ const loginController = {
     }
   },
   async register(req, res, next) {
-    try {
-      const resp = await req.body;
-      console.log(resp, "resp");
+  try {
+    const resp = req.body;
 
-      const user = await prisma.user.findFirst({
-        where: {
-          email: resp.email,
-        },
-      });
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email: resp.email,
+      },
+    });
 
-      if (user) {
-        return res.status(400).json({
-          message: "User already exists",
-        });
-      }
-
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(resp.password, salt);
-
-      const createdUser = await prisma.user.create({
-        data: {
-          email: resp.email,
-          name: resp.name,
-          gender: resp.gender,
-          password: hashedPassword,
-        },
-      });
-
-      res.status(200).json({
-        message: "User created successfully",
-        createdUser,
-      });
-    } catch (err) {
-      console.log(err);
-      res.status(400).json({
-        message: "An error occurred",
-        error: err.message,
+    if (existingUser) {
+      return res.status(400).json({
+        message: "User already exists",
       });
     }
-  },
+
+    
+    const userCount = await prisma.user.count({
+      where: {
+        name: resp.name,
+      },
+    });
+
+   
+const username = `@${resp.name}${userCount + 1}`.toLowerCase();
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(resp.password, salt);
+
+    const createdUser = await prisma.user.create({
+      data: {
+        email: resp.email,
+        name: resp.name,
+        gender: resp.gender,
+        password: hashedPassword,
+        username, 
+        rating: 5, 
+      },
+    });
+
+    await prisma.wallet.create({
+      data: {
+        userId: createdUser.id,
+        balance_coins: 100,
+        balance_inr: 0,
+      },
+    });
+
+    res.status(200).json({
+      message: "User created successfully",
+      createdUser,
+    });
+  } catch (err) {
+    console.log(err);
+    res.status(400).json({
+      message: "An error occurred",
+      error: err.message,
+    });
+  }
+},
+
 };
 export default loginController;
 

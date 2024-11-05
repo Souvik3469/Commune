@@ -7,10 +7,11 @@ async function generateInviteLink(chatId, currentUserId) {
   const chat = await prisma.chat.findUnique({
     where: { id: chatId },
   });
-
+  
   if (!chat) {
     throw new Error('Group chat not found');
   }
+
    if (!chat.isGroup) {
     throw new Error('Invite links can only be generated for group chats');
   }
@@ -30,10 +31,10 @@ async function generateInviteLink(chatId, currentUserId) {
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
     },
   });
-
+  
   
   const inviteLink = `${process.env.FRONTEND_URL}/join/${inviteToken}`;
-
+  
   return inviteLink;
 }
 

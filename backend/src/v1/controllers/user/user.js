@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { customResponse } from "../../../utils/Response";
-
+import { Match } from "../../services/MatchingService";
 const prisma = new PrismaClient();
 const AWS = require("aws-sdk");
 const S3 = new AWS.S3();
@@ -44,7 +44,32 @@ const userController = {
         .send({ message: "Internal Server Error", error: err.message });
     }
   },
+  async connect(req, res) {
+    try {
+      let user;
 
+      user = await prisma.user.findFirst({
+        where: {
+          id: req.user.id,
+        },
+        include: {
+          topics: true,
+        },
+      });
+      const allusers = await prisma.user.findMany();
+      const topic = await prisma.topic.findMany();
+      const users = Match(allusers, user, topic);
+
+      res.status(200).json({
+        message: "success",
+        data: users,
+      });
+    } catch (err) {
+      return res
+        .status(500)
+        .json({ message: "Internal Server Error", error: err.message });
+    }
+  },
   async getPresignUrlPromiseFunction(S3, s3Params) {
     return new Promise((resolve, reject) => {
       S3.getSignedUrl("putObject", s3Params, (err, url) => {
@@ -59,11 +84,18 @@ const userController = {
   async userDetails(req, res, next) {
     try {
       let user;
+
       user = await prisma.user.findFirst({
         where: {
           id: req.user.id,
         },
+        include: {
+          topics: true,
+        },
       });
+      const allusers = await prisma.user.findMany();
+      const topic = await prisma.topic.findMany();
+      Match(allusers, user, topic);
       res.json(customResponse(200, user));
     } catch (err) {
       res.json(customResponse(400, err));
@@ -71,6 +103,90 @@ const userController = {
     }
   },
 
+  async SelectTopic(req, res, next) {
+    try {
+      const userId = req.user.id;
+      const {
+        phoneNumber,
+        titles,
+        bio,
+        gender,
+        collegeName,
+        state,
+        city,
+        stream,
+        yearofstudy,
+        kyc,
+        collegeID,
+        dob,
+        profilePic,
+      } = req.body;
+
+      console.log(titles, "tiles");
+      console.log(bio, "bio");
+
+      const updateData = {};
+
+      if (bio) updateData.bio = bio;
+      if (gender) updateData.gender = gender;
+      if (dob) updateData.dob = dob;
+      if (stream) updateData.stream = stream;
+      if (yearofstudy) updateData.yearofstudy = yearofstudy;
+      if (state) updateData.state = state;
+      if (collegeID) updateData.collegeId = collegeID;
+      if (kyc) updateData.kyc = kyc;
+      if (profilePic) updateData.profilePic = profilePic;
+      if (city) updateData.city = city;
+      if (collegeName) updateData.collegeName = collegeName;
+      if (phoneNumber) updateData.phoneNumber = phoneNumber;
+
+      const user = await prisma.user.findFirst({
+        where: {
+          id: userId,
+        },
+      });
+
+      if (user) {
+        await prisma.user.update({
+          where: {
+            id: userId,
+          },
+          data: updateData,
+        });
+        await prisma.user.update({
+          where: {
+            id: userId,
+          },
+          data: {
+            active: true,
+          },
+        });
+      }
+
+      if (titles) {
+        const titlePromises = titles.map(async (title) => {
+          return await prisma.topic.create({
+            data: {
+              title: title,
+              userId: userId,
+            },
+          });
+        });
+        await Promise.all(titlePromises);
+      }
+
+      res.status(200).json({
+        message: "Profile updated",
+        success: true,
+      });
+    } catch (err) {
+      console.log(err, "err");
+      res.status(200).json({
+        message: err.message || "An error occurred",
+        success: false,
+      });
+    }
+  },
   async searchUsers(req, res, next) {
     try {
         const { query } = req.query;
@@ -78,7 +194,7 @@ const userController = {
         if (!query) {
             return res.status(400).json({ error: "Search query is required" });
         }
-
+        
         const users = await prisma.user.findMany({
             where: {
                 name: {

@@ -1,7 +1,8 @@
 // schema.prisma
 
 generator client {
-    provider = "prisma-client-js"
+    provider        = "prisma-client-js"
+    previewFeatures = ["omitApi"]
 }
 
 datasource db {
@@ -10,27 +11,30 @@ datasource db {
 }
 
 model User {
-    id          String    @id @default(auto()) @map("_id") @db.ObjectId
-    name        String
-    email       String
-    password    String
-    dob         DateTime?
-    active      Boolean   @default(false)
-    gender      String?
-    googleId    String?
-    profilePic  String?
-  
-    createdAt   DateTime  @default(now())
-    bio         String?
-    updatedAt   DateTime  @updatedAt
-    topics      Topic[]
-    messages    Message[]
-    phoneNumber String?
-    chats       Chat[]    @relation(fields: [chatIds], references: [id])
-    chatIds     String[]  @db.ObjectId
-    groupChats  Chat[]    @relation("GroupChats")
+    id       String  @id @default(auto()) @map("_id") @db.ObjectId
+    name     String
+    email    String
+    username String?
 
+    password          String
+    googleId          String?
+    dob               DateTime?
+    active            Boolean             @default(false)
+    gender            String?
+    profilePic        String?
+   
+    createdAt         DateTime            @default(now())
+    bio               String?
+    updatedAt         DateTime            @updatedAt
+
+    messages          Message[]
+    phoneNumber       String?
+    chats             Chat[]              @relation(fields: [chatIds], references: [id])
+    chatIds           String[]            @db.ObjectId
+    groupChats        Chat[]              @relation("GroupChats")
+    MessageReadStatus MessageReadStatus[]
 }
+
 
 model Chat {
     id           String        @id @default(auto()) @map("_id") @db.ObjectId
@@ -48,18 +52,25 @@ model Chat {
 }
 
 model Message {
-    id        String   @id @default(auto()) @map("_id") @db.ObjectId
-    content   String
-    type      String   @default("text")
-    timestamp DateTime @default(now())
-    logo      String?
+    id                String              @id @default(auto()) @map("_id") @db.ObjectId
+    content           String
+    type              String              @default("text")
+    timestamp         DateTime            @default(now())
+    logo              String?
+    chatId            String              @db.ObjectId
+    senderId          String              @db.ObjectId
+    sender            User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
+    chat              Chat                @relation(fields: [chatId], references: [id], onDelete: Cascade)
+    MessageReadStatus MessageReadStatus[]
+}
 
-    chatId String @db.ObjectId
-
-    senderId String @db.ObjectId
-    sender   User   @relation(fields: [senderId], references: [id], onDelete: Cascade)
-
-    chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+model MessageReadStatus {
+    id        String    @id @default(auto()) @map("_id") @db.ObjectId
+    messageId String    @db.ObjectId
+    userId    String    @db.ObjectId
+    readAt    DateTime? // Null if unread, timestamp if read
+    message   Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+    user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model InviteToken {
