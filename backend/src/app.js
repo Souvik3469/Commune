@@ -1,101 +1,101 @@
-import cors from "cors";
 import express from "express";
+import http from "http";
+import { Server } from "socket.io";
+import cors from "cors";
+import createError from "http-errors";
+import {
+  authRoutes,
+  chatRoute,
+  userRoute,
+ 
+} from "./v1/routes";
+import cloudinary from "cloudinary";
+import session from "express-session";
+import passport from "passport";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
-import createError from "http-errors";
 import morgan from "morgan";
-import path from "path";
-import session from "express-session";
-import "./v1/config/env.config";
-import passport from "passport";
-import { authRoutes, chatRoute, userRoute } from "./v1/routes";
-import { Passport } from "passport";
-import cloudinary from "cloudinary";
-const router = express.Router();
-// const openai = new OpenAI({
-//   apiKey: process.env.OPENAI_API_KEY, // This is also the default, can be omitted
-// });
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 1000 requests per `window` (here, per 15 minutes)
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  message: {
-    status: createError.TooManyRequests().status,
-    message: createError.TooManyRequests().message,
+import { PrismaClient } from "@prisma/client";
+
+// Configuration and middleware
+const app = express();
+const type = process.env.REACT_APP_TYPE;
+console.log("Type",type)
+
+const devOrigins = [
+  process.env.DEV_URL1,
+  process.env.DEV_URL2,
+  process.env.DEV_URL3,
+];
+const prodOrigins = [
+  process.env.PROD_URL1,
+  process.env.PROD_URL2,
+  process.env.PROD_URL3,
+];
+
+const corsOrigins = type === "dev" ? devOrigins : prodOrigins;
+
+const server = http.createServer(app);
+app.use(
+  cors({
+    origin: corsOrigins,
+    credentials: true,
+  })
+);
+
+// Configure CORS for Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: corsOrigins,
+    methods: ["GET", "POST"],
+    credentials: true,
   },
 });
 
-const corsOptions = {
-  origin: [
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "http://localhost:3001",
-  ],
-  credentials: true, //access-control-allow-credentials:true
-  optionSuccessStatus: 200,
-};
 
+
+
+
+// Configure general middleware
+
+app.use(helmet());
+app.use(morgan("dev"));
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(session({ resave: false, saveUninitialized: true, secret: "ankush" }));
+app.use(passport.initialize());
+app.use(passport.session());
+
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
+app.use(limiter);
+
+// Cloudinary configuration
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
-const app = express();
-app.use(cors(corsOptions));
-// Global variable appRoot with base dirname
-global.appRoot = path.resolve(__dirname);
-app.use(
-  session({
-    resave: false,
-    saveUninitialized: true,
-    secret: "ankush",
-  })
-);
-// Middlewares
 
-app.use(helmet());
-app.use(passport.authenticate("session"));
-app.use(passport.initialize());
-app.use(passport.session());
-
-app.set("trust proxy", 1);
-app.use(limiter);
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(morgan("dev"));
-// app.use(favicon(path.join(__dirname, "public", "favicon.ico")));
+// Express routes
+app.use("/v1/auth", authRoutes);
+app.use("/v1/user", userRoute);
+app.use("/v1/chat", chatRoute);
 
 // Welcome Route
-app.all("/", (req, res, next) => {
-  res.send({ message: "API is Up and Running on render 😎🚀" });
-});
-
-const apiVersion = "v1";
-
-// Routes
-app.use(`/${apiVersion}/auth`, authRoutes);
-app.use(`/${apiVersion}/user`, userRoute);
-app.use(`/${apiVersion}/chat`, chatRoute);
-
+app.all("/", (req, res) =>
+  res.send({ message: "API is Up and Running on render 😎🚀" })
+);
 
 // // 404 Handler
 app.use((req, res, next) => {
   next(createError.NotFound());
 });
 
-// // Error Handler
+// Error Handler
 app.use((err, req, res, next) => {
-  res.status(err.status || 500);
-  res.send({
-    status: err.status || 500,
-    message: err.message,
-  });
-});
-router.get("/success", (req, res) => {
-  const { user, accessToken } = req.user;
-  console.log(user, "user");
-  console.log(accessToken, "Accesstoken");
+  res
+    .status(err.status || 500)
+    .send({ status: err.status || 500, message: err.message });
 });
 
 // failure
@@ -104,5 +104,5 @@ router.get("/success", (req, res) => {
 const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`🚀 @ http://localhost:${PORT}`);
-  console.log(`connected to ${process.env.DATABASE_URL}`);
+  console.log(`Connected to ${process.env.DATABASE_URL}`);
 });
