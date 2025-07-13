@@ -1,7 +1,7 @@
 {
-  "name": "chatapp-backend",
+  "name": "commune-backend",
   "version": "1.0.0",
-  "description": "backend",
+  "description": "commune-backend",
   "main": "app.js",
   "scripts": {
     "start": "node build/app.js",
@@ -28,6 +28,7 @@
     "express-session": "^1.18.0",
     "helmet": "^6.0.1",
     "http-errors": "^2.0.0",
+    "https": "^1.0.0",
     "jsonwebtoken": "^9.0.0",
     "mailgun-js": "^0.22.0",
     "mongoose": "^7.5.3",

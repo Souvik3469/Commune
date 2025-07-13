@@ -3,6 +3,14 @@ const passport = require("passport");
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 
+// const IP = process.env.REACT_APP_IP;
+// const REACT_APP_PROD_SSL_SWITCH = process.env.REACT_APP_PROD_SSL_SWITCH;
+// const REACT_APP_PROD_SSL_PORT = process.env.REACT_APP_PROD_SSL_PORT;
+// const BACKEND_URL =  `${REACT_APP_PROD_SSL_SWITCH}://${IP}:${REACT_APP_PROD_SSL_PORT}/v1`;
+const BACKEND_URL = `${process.env.BACKEND_URL}/v1`;
+console.log(BACKEND_URL);
+// for the testing purpose use this url
+//'http://localhost:5000/v1'
 const GoogleStrategy = require("passport-google-oauth2").Strategy;
 passport.serializeUser((user, done) => {
   done(null, user);
@@ -16,7 +24,7 @@ passport.use(
     {
       clientID: process.env.CLIENT_ID,
       clientSecret: process.env.CLIENT_SECRET,
-      callbackURL: "http://localhost:5000/v1/auth/google/callback",
+      callbackURL: BACKEND_URL + "/auth/google/callback",
     },
     async (req, acc, token, profile, done) => {
       console.log(profile, "profile data");
@@ -49,3 +57,4 @@ passport.use(
     }
   )
 );
+// http://duocortex.app:443/v1/auth/google/callback

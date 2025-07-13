@@ -12,17 +12,17 @@ const chatController = {
     try {
       let { userIds, isGroup, name, logo, usernames } = req.body;
       const currentUserId = req.user.id;
-       if (isGroup && !name) {
-      return res.status(400).json({
-        error: "Group chats must have a name.",
-      });
-    }
-      if(usernames){
+      if (isGroup && !name) {
+        return res.status(400).json({
+          error: "Group chats must have a name.",
+        });
+      }
+      if (usernames) {
         const users = await prisma.user.findMany({
           where: {
             username: {
               in: usernames,
-              mode: 'insensitive', 
+              mode: "insensitive",
             },
           },
         });
@@ -190,12 +190,48 @@ const chatController = {
         },
       });
 
-      res.json(chats);
+      const filteredChats = await Promise.all(
+        chats.map(async (chat) => {
+          const deletedChat = await prisma.deletedChat.findUnique({
+            where: {
+              userId_chatId: {
+                userId: userId,
+                chatId: chat.id,
+              },
+            },
+          });
+
+          if (deletedChat) {
+            const latestMessage = await prisma.message.findFirst({
+              where: {
+                chatId: chat.id,
+                timestamp: {
+                  gt: deletedChat.deletedAt,
+                },
+              },
+              orderBy: {
+                timestamp: "desc",
+              },
+            });
+
+            if (!latestMessage) {
+              return null;
+            }
+          }
+
+          return chat;
+        })
+      );
+
+      const visibleChats = filteredChats.filter(Boolean);
+
+      res.json(visibleChats);
     } catch (err) {
       console.log(err);
       next(err);
     }
   },
+
   async getRooms(req, res, next) {
     try {
       const userId = req.user.id;
@@ -235,11 +271,11 @@ const chatController = {
     }
   },
   async getUnreadMessages(req, res, next) {
-    try{
+    try {
       const userId = req.user.id;
       const chatId = req.params.chatId;
       const unreadMessages = await prisma.message.findMany({
-        where:{
+        where: {
           chatId,
           MessageReadStatus: {
             none: {
@@ -252,8 +288,7 @@ const chatController = {
       });
 
       res.json(unreadMessages.length);
-    }
-    catch(err){
+    } catch (err) {
       next(err);
     }
   },
@@ -334,12 +369,12 @@ const chatController = {
         data: { lastModified: new Date() },
       });
       await prisma.messageReadStatus.createMany({
-        data:{
+        data: {
           messageId: message.id,
           userId: currentUserId,
           readAt: new Date(),
-        }
-      })
+        },
+      });
       res.json({
         ...message,
         sender: {
@@ -359,7 +394,7 @@ const chatController = {
   async updateMessageStatus(req, res, next) {
     try {
       const { chatId } = req.params;
-      const  userId = req.user.id; 
+      const userId = req.user.id;
 
       const unreadMessages = await prisma.message.findMany({
         where: {
@@ -377,13 +412,15 @@ const chatController = {
       const messageIds = unreadMessages.map((msg) => msg.id);
 
       // Mark these messages as read by this user
-      await prisma.messageReadStatus.createMany({
-        data: messageIds.map((messageId) => ({
-          messageId,
-          userId,
-          readAt: new Date(),
-        })),
-      });
+      if (messageIds.length > 0) {
+        await prisma.messageReadStatus.createMany({
+          data: messageIds.map((messageId) => ({
+            messageId,
+            userId,
+            readAt: new Date(),
+          })),
+        });
+      }
 
       res.json({ message: "Message status updated successfully" });
     } catch (err) {
@@ -393,18 +430,16 @@ const chatController = {
   async getMessagesByChat(req, res, next) {
     try {
       const { chatId } = req.params;
-      const { page = 1, limit = 10 } = req.query;
+      // const { page = 1, limit = 10 } = req.query;
 
-      const pageInt = parseInt(page, 10);
-      const limitInt = parseInt(limit, 10);
+      // const pageInt = parseInt(page, 10);
+      // const limitInt = parseInt(limit, 10);
 
       const chat = await prisma.chat.findFirst({
         where: {
           id: chatId,
           users: {
-            some: {
-              id: req.user.id,
-            },
+            some: { id: req.user.id },
           },
         },
       });
@@ -415,9 +450,22 @@ const chatController = {
         });
       }
 
-      const messages = await prisma.message.findMany({
-        where: { chatId },
+      const deletedChat = await prisma.deletedChat.findUnique({
+        where: { userId_chatId: { userId: req.user.id, chatId } },
+      });
 
+      const messageFilter = {
+        chatId,
+      };
+
+      if (deletedChat) {
+        messageFilter.timestamp = { gt: deletedChat.deletedAt };
+      }
+
+      const messages = await prisma.message.findMany({
+        where: messageFilter,
+        // skip: (pageInt - 1) * limitInt,
+        // take: limitInt,
         include: {
           sender: {
             select: {
@@ -440,6 +488,71 @@ const chatController = {
       next(err);
     }
   },
+  async deleteChat(req, res, next) {
+    try {
+      const { chatId } = req.params;
+      const currentUserId = req.user.id;
+
+      const chat = await prisma.chat.findUnique({
+        where: { id: chatId },
+        select: {
+          isGroup: true,
+          adminId: true,
+          users: { select: { id: true } },
+        },
+      });
+
+      if (!chat) {
+        return res.status(404).json({ error: "Chat not found" });
+      }
+
+      if (!chat.isGroup) {
+        await prisma.deletedChat.upsert({
+          where: {
+            userId_chatId: {
+              userId: currentUserId,
+              chatId: chatId,
+            },
+          },
+          update: {
+            deletedAt: new Date(),
+          },
+          create: {
+            userId: currentUserId,
+            chatId: chatId,
+            deletedAt: new Date(),
+          },
+        });
+
+        return res
+          .status(200)
+          .json({ message: "Chat deleted for current user." });
+      }
+
+      if (chat.isGroup) {
+        if (chat.adminId === currentUserId) {
+          return res
+            .status(403)
+            .json({ error: "Admins cannot delete the group chat." });
+        }
+
+        await prisma.chat.update({
+          where: { id: chatId },
+          data: {
+            users: { disconnect: { id: currentUserId } },
+          },
+        });
+
+        return res.status(200).json({
+          message:
+            "You have been removed from the group and will no longer see this chat.",
+        });
+      }
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async updateGroupChat(req, res, next) {
     try {
       const { chatId } = req.params;
@@ -509,44 +622,7 @@ const chatController = {
       next(err);
     }
   },
-  async deleteChat(req, res, next) {
-    try {
-      const { chatId } = req.params;
-      const currentUserId = req.user.id;
 
-      const chat = await prisma.chat.findUnique({
-        where: { id: chatId },
-        select: {
-          isGroup: true,
-          adminId: true,
-        },
-      });
-
-      if (!chat) {
-        return res.status(404).json({ error: "Chat not found" });
-      }
-
-      if (!chat.isGroup) {
-        return res
-          .status(400)
-          .json({ error: "This operation is only allowed for group chats" });
-      }
-
-      if (chat.adminId !== currentUserId) {
-        return res
-          .status(403)
-          .json({ error: "You are not authorized to delete this chat" });
-      }
-
-      await prisma.chat.delete({
-        where: { id: chatId },
-      });
-
-      res.json({ message: "Group chat deleted successfully" });
-    } catch (err) {
-      next(err);
-    }
-  },
   //if sending invitelink via email
   // async  sendInviteLink(req, res, next) {
   //   try {
