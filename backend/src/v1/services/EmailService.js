@@ -8,9 +8,9 @@ export function sendOTPEmail(otp, recipientEmail, recipientName) {
     path: "/api/v5/email/send",
     headers: {
       accept: "application/json",
-      authkey: "429576Ad3trg3tn66d9b0f8P1", 
-      "content-type": "application/JSON"
-    }
+      authkey: process.env.AUTH_KEY,
+      "content-type": "application/JSON",
+    },
   };
 
   const req = http.request(options, function (res) {
@@ -32,25 +32,24 @@ export function sendOTPEmail(otp, recipientEmail, recipientName) {
         to: [
           {
             name: recipientName,
-            email: recipientEmail
-          }
+            email: recipientEmail,
+          },
         ],
         variables: {
           name: recipientName,
-          otp: otp
-        }
-      }
+          otp: otp,
+        },
+      },
     ],
     from: {
       name: "Duocortex",
-      email: "mail@mail.duocortex.app"
+      email: "mail@mail.duocortex.app",
     },
     domain: "mail.duocortex.app",
-    template_id: "global_otp"
+    template_id: "global_otp",
   };
 
   // Sending the request
   req.write(JSON.stringify(emailData));
   req.end();
 }
-

@@ -7,86 +7,47 @@ const ably = new Ably.Realtime(process.env.ABLY_API_KEY);
 
 const chatController = {
   async createChat(req, res, next) {
-    console.log(req.body);
-
     try {
       let { userIds, isGroup, name, logo, usernames } = req.body;
       const currentUserId = req.user.id;
+
+      // Validate group chat name
       if (isGroup && !name) {
-        return res.status(400).json({
-          error: "Group chats must have a name.",
-        });
+        return res.status(400).json({ error: "Group chats must have a name." });
       }
+
+      // Resolve usernames to userIds
       if (usernames) {
         const users = await prisma.user.findMany({
           where: {
-            username: {
-              in: usernames,
-              mode: "insensitive",
-            },
+            username: { in: usernames, mode: "insensitive" },
           },
         });
+
         if (users.length !== usernames.length) {
-          return res.status(400).json({
-            error: "One or more users not found",
-          });
+          return res.status(400).json({ error: "One or more users not found" });
         }
-        userIds = users.map((user) => user.id);
+
+        userIds = users.map((u) => u.id);
       }
-      let chat;
-      if (isGroup) {
-        chat = await prisma.chat.create({
-          data: {
-            name,
-            logo,
-            isGroup: true,
-            lastModified: new Date(),
-            adminId: currentUserId,
-            userIds: [currentUserId, ...userIds],
-            users: {
-              connect: [
-                { id: currentUserId },
-                ...userIds.map((id) => ({ id })),
-              ],
-            },
+
+      // Common include block
+      const includeFields = {
+        users: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            profilePic: true,
+            dob: true,
           },
-          include: {
-            users: {
-              select: {
-                name: true,
-                email: true,
-                id: true,
-                profilePic: true,
-              },
-            },
-            messages: {
-              select: {
-                content: true,
-                type: true,
-                timestamp: true,
-                sender: {
-                  select: {
-                    name: true,
-                    email: true,
-                    profilePic: true,
-                    dob: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-      } else {
-        const existingChat = await prisma.chat.findFirst({
-          where: {
-            AND: [
-              { userIds: { has: currentUserId } },
-              { userIds: { has: userIds[0] } },
-              { isGroup: false },
-            ],
-          },
-          include: {
-            users: {
+        },
+        messages: {
+          select: {
+            content: true,
+            type: true,
+            timestamp: true,
+            sender: {
               select: {
                 name: true,
                 email: true,
@@ -94,62 +55,60 @@ const chatController = {
                 dob: true,
               },
             },
-            messages: {
-              select: {
-                content: true,
-                type: true,
-                timestamp: true,
-                sender: {
-                  select: {
-                    name: true,
-                    email: true,
-                    profilePic: true,
-                    dob: true,
-                  },
-                },
-              },
+          },
+        },
+      };
+
+      let chat;
+
+      if (isGroup) {
+        // Create new group chat
+        chat = await prisma.chat.create({
+          data: {
+            name,
+            logo,
+            isGroup: true,
+            adminId: currentUserId,
+            lastModified: new Date(),
+            userIds: [currentUserId, ...(userIds || [])],
+            users: {
+              connect: [
+                { id: currentUserId },
+                ...(userIds || []).map((id) => ({ id })),
+              ],
             },
           },
+          include: includeFields,
+        });
+      } else {
+        // Check if 1-to-1 chat already exists
+        const otherUserId = userIds?.[0];
+        const existingChat = await prisma.chat.findFirst({
+          where: {
+            isGroup: false,
+            userIds: {
+              hasEvery: [currentUserId, otherUserId],
+            },
+          },
+          include: includeFields,
         });
 
         if (existingChat) {
           return res.json(existingChat);
-        } else {
-          chat = await prisma.chat.create({
-            data: {
-              userIds: [currentUserId, userIds[0]],
-              users: {
-                connect: [{ id: currentUserId }, { id: userIds[0] }],
-              },
-              lastModified: new Date(),
-            },
-            include: {
-              users: {
-                select: {
-                  name: true,
-                  email: true,
-                  profilePic: true,
-                  dob: true,
-                },
-              },
-              messages: {
-                select: {
-                  content: true,
-                  type: true,
-                  timestamp: true,
-                  sender: {
-                    select: {
-                      name: true,
-                      email: true,
-                      profilePic: true,
-                      dob: true,
-                    },
-                  },
-                },
-              },
-            },
-          });
         }
+
+        // Create new 1-to-1 chat
+        chat = await prisma.chat.create({
+          data: {
+            isGroup: false,
+            lastModified: new Date(),
+            userIds: [currentUserId, otherUserId],
+            users: {
+              connect: [{ id: currentUserId }, { id: otherUserId }],
+            },
+          },
+          include: includeFields,
+        });
       }
 
       res.json(chat);
@@ -157,7 +116,6 @@ const chatController = {
       next(err);
     }
   },
-
   async getChats(req, res, next) {
     try {
       const userId = req.user.id;
@@ -270,6 +228,7 @@ const chatController = {
       next(err);
     }
   },
+
   async getUnreadMessages(req, res, next) {
     try {
       const userId = req.user.id;
@@ -292,6 +251,7 @@ const chatController = {
       next(err);
     }
   },
+
   async createMessage(req, res, next) {
     try {
       const { content, chatId, type, fileUrl } = req.body;
@@ -391,6 +351,7 @@ const chatController = {
       next(err);
     }
   },
+
   async updateMessageStatus(req, res, next) {
     try {
       const { chatId } = req.params;
@@ -427,19 +388,85 @@ const chatController = {
       next(err);
     }
   },
+
+  // async getMessagesByChat(req, res, next) {
+  //   try {
+  //     const { chatId } = req.params;
+  //     const { cursor } = req.query;
+
+  //     const chat = await prisma.chat.findFirst({
+  //       where: {
+  //         id: chatId,
+  //         users: { some: { id: req.user.id } },
+  //       },
+  //     });
+
+  //     if (!chat) {
+  //       return res.status(404).json({
+  //         error: "Chat not found or user is not a member of this chat",
+  //       });
+  //     }
+
+  //     const deletedChat = await prisma.deletedChat.findUnique({
+  //       where: { userId_chatId: { userId: req.user.id, chatId } },
+  //     });
+
+  //     const whereCondition = {
+  //       chatId,
+  //     };
+
+  //     if (deletedChat) {
+  //       whereCondition.timestamp = { gt: deletedChat.deletedAt };
+  //     }
+
+  //     if (cursor) {
+  //       whereCondition.timestamp = {
+  //         ...(whereCondition.timestamp || {}),
+  //         lt: new Date(cursor),
+  //       };
+  //     }
+
+  //     const messages = await prisma.message.findMany({
+  //       where: whereCondition,
+  //       orderBy: { timestamp: "desc" },
+  //       take: 20,
+  //       include: {
+  //         sender: {
+  //           select: {
+  //             name: true,
+  //             email: true,
+  //             profilePic: true,
+  //             dob: true,
+  //           },
+  //         },
+  //         MessageReadStatus: {
+  //           where: { userId: req.user.id },
+  //         },
+  //       },
+  //     });
+
+  //     res.json({ messages: messages.reverse(), chat });
+  //   } catch (err) {
+  //     next(err);
+  //   }
+  // },
+
+  // controllers/messageController.ts
+
   async getMessagesByChat(req, res, next) {
     try {
       const { chatId } = req.params;
-      // const { page = 1, limit = 10 } = req.query;
+      const { cursor } = req.query;
+      const userId = req.user.id;
 
-      // const pageInt = parseInt(page, 10);
-      // const limitInt = parseInt(limit, 10);
+      const limit = 20;
 
+      // Check if user is a participant of the chat
       const chat = await prisma.chat.findFirst({
         where: {
           id: chatId,
           users: {
-            some: { id: req.user.id },
+            some: { id: userId },
           },
         },
       });
@@ -450,44 +477,60 @@ const chatController = {
         });
       }
 
+      // Check if user has deleted the chat before
       const deletedChat = await prisma.deletedChat.findUnique({
-        where: { userId_chatId: { userId: req.user.id, chatId } },
+        where: {
+          userId_chatId: {
+            userId,
+            chatId,
+          },
+        },
       });
 
-      const messageFilter = {
+      // Prepare where condition
+      const whereCondition = {
         chatId,
+        ...(deletedChat && {
+          timestamp: {
+            gt: deletedChat.deletedAt,
+          },
+        }),
+        ...(cursor && {
+          timestamp: {
+            ...(deletedChat?.deletedAt ? { gt: deletedChat.deletedAt } : {}),
+            lt: new Date(cursor),
+          },
+        }),
       };
 
-      if (deletedChat) {
-        messageFilter.timestamp = { gt: deletedChat.deletedAt };
-      }
-
+      // Fetch messages with pagination
       const messages = await prisma.message.findMany({
-        where: messageFilter,
-        // skip: (pageInt - 1) * limitInt,
-        // take: limitInt,
+        where: whereCondition,
+        orderBy: { timestamp: "desc" },
+        take: limit + 1,
         include: {
           sender: {
             select: {
               name: true,
-              email: true,
               profilePic: true,
-              dob: true,
-            },
-          },
-          MessageReadStatus: {
-            where: {
-              userId: req.user.id,
             },
           },
         },
       });
 
-      res.json({ messages, chat });
-    } catch (err) {
-      next(err);
+      const hasMore = messages.length > limit;
+      const messagesToReturn = hasMore ? messages.slice(0, limit) : messages;
+
+      return res.status(200).json({
+        messages: messagesToReturn,
+        nextCursor: hasMore ? messagesToReturn.at(-1)?.timestamp : null, // using timestamp here
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Failed to fetch messages" });
     }
   },
+
   async deleteChat(req, res, next) {
     try {
       const { chatId } = req.params;
@@ -658,6 +701,7 @@ const chatController = {
       next(err);
     }
   },
+
   async acceptInviteLink(req, res, next) {
     try {
       const { inviteToken } = req.params;
@@ -727,6 +771,7 @@ const chatController = {
       next(err);
     }
   },
+
   async removeGroupMembers(req, res, next) {
     try {
       const { chatId } = req.params;

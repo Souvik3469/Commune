@@ -1,35 +1,35 @@
 import { PrismaClient } from "@prisma/client";
 import { customResponse } from "../../../utils/Response";
 
-import {sendEmail} from "../../utils/sendEmail"
+import { sendEmail } from "../../utils/sendEmail";
 const prisma = new PrismaClient();
 
 import bcrypt from "bcrypt";
 
 const userController = {
-  
-
-  async userDetails(req, res, next) {
+  async myDetails(req, res, next) {
     try {
-      let user;
-
-      user = await prisma.user.findFirst({
-        where: {
-          id: req.user.id,
-        },
-        include: {
-          topics: true,
-        },
+      const user = await prisma.user.findFirst({
+        where: { id: req.user.id },
       });
-      const allusers = await prisma.user.findMany();
-      const topic = await prisma.topic.findMany();
-      Match(allusers, user, topic);
-      res.json(customResponse(200, user));
+
+      if (!user) {
+        return res.status(404).json(customResponse(404, "User not found"));
+      }
+
+      const defaultProfilePic = "https://i.pravatar.cc/150?u=27";
+      const userWithDefaultPhoto = {
+        ...user,
+        profilePic: user.profilePic || defaultProfilePic,
+      };
+
+      res.json(customResponse(200, userWithDefaultPhoto));
     } catch (err) {
-      res.json(customResponse(400, err));
       console.log(err, "err");
+      res.status(500).json(customResponse(500, "Something went wrong"));
     }
   },
+
   async getUserDetails(req, res, next) {
     try {
       const { userId } = req.query;
@@ -39,13 +39,13 @@ const userController = {
         where: {
           id: userId,
         },
-        select:{
-          name:true,
-          email:true,
-          phoneNumber:true,
-          profilePic:true,
-          bio:true,
-        }
+        select: {
+          name: true,
+          email: true,
+          phoneNumber: true,
+          profilePic: true,
+          bio: true,
+        },
       });
 
       res.json(customResponse(200, user));
@@ -54,51 +54,50 @@ const userController = {
       console.log(err, "err");
     }
   },
-  
+
   async searchUsers(req, res, next) {
     try {
-        const { query } = req.query;
+      const { query } = req.query;
 
-        if (!query) {
-            return res.status(400).json({ error: "Search query is required" });
-        }
-        
-        const users = await prisma.user.findMany({
-            where: {
-                name: {
-                    contains: query,
-                    mode: 'insensitive', 
-                },
-            },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                profilePic: true,
-                dob: true,
-            },
-            orderBy: {
-                name: 'asc',
-            },
-        });
+      if (!query) {
+        return res.status(400).json({ error: "Search query is required" });
+      }
 
-        res.json(users);
+      const users = await prisma.user.findMany({
+        where: {
+          name: {
+            contains: query,
+            mode: "insensitive",
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          profilePic: true,
+          dob: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      res.json(users);
     } catch (err) {
-        next(err);
+      next(err);
     }
-},
- async forgotPassword(req, res, next) {
+  },
+
+  async forgotPassword(req, res, next) {
     try {
       const { email } = req.body;
 
-   
       if (!email) {
         return res.status(400).json({ message: "Email is required" });
       }
 
-   
       const user = await prisma.user.findUnique({
-        where: { email }
+        where: { email },
       });
 
       if (!user) {
@@ -107,16 +106,14 @@ const userController = {
 
       // const resetToken = crypto.randomBytes(32).toString("hex");
 
-     
       // const resetTokenHash = crypto
       //   .createHash("sha256")
       //   .update(resetToken)
       //   .digest("hex");
 
-        const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const resetPasswordExpiry = new Date(Date.now() + 15*60*1000); // 15 mins
+      const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const resetPasswordExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
 
-     
       await prisma.user.update({
         where: { email },
         data: {
@@ -125,24 +122,20 @@ const userController = {
         },
       });
 
-     
-     // const resetURL = `${process.env.DEV_URL2}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
-
-     
+      // const resetURL = `${process.env.DEV_URL2}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
       // Send the email
-     await sendEmail(
-      email,
-      "Password Reset Request",
-      // `
-      //   <p>You requested a password reset.</p>
-      //   <p>Click the link below to reset your password:</p>
-      //   <a href="${resetURL}">${resetURL}</a>
-      //   <p>This link will expire in 15 minutes.</p>
-      // `
-       `Your password reset code is ${resetCode}. The code will expire in 15 minutes`
-
-    );
+      await sendEmail(
+        email,
+        "Password Reset Request",
+        // `
+        //   <p>You requested a password reset.</p>
+        //   <p>Click the link below to reset your password:</p>
+        //   <a href="${resetURL}">${resetURL}</a>
+        //   <p>This link will expire in 15 minutes.</p>
+        // `
+        `Your password reset code is ${resetCode}. The code will expire in 15 minutes`
+      );
 
       return res.status(200).json({ message: "Password reset email sent" });
     } catch (err) {
@@ -152,57 +145,67 @@ const userController = {
         .json({ message: "Internal Server Error", error: err.message });
     }
   },
-  async  verifyResetCode(req, res) {
-  try {
-    const { email, resetCode } = req.body;
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
+  async verifyResetCode(req, res) {
+    try {
+      const { email, resetCode } = req.body;
 
-    if (!user || user.resetPasswordToken !== resetCode || user.resetPasswordExpiry < new Date()) {
-      return res.status(400).json({ message: "Invalid or expired reset code" });
+      const user = await prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (
+        !user ||
+        user.resetPasswordToken !== resetCode ||
+        user.resetPasswordExpiry < new Date()
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Invalid or expired reset code" });
+      }
+
+      res.status(200).json({ message: "Code verified successfully" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
     }
+  },
 
-    
-    res.status(200).json({ message: "Code verified successfully" });
+  async resetPassword(req, res) {
+    try {
+      const { email, newPassword } = req.body;
+      // console.log("Pass",newPassword)
 
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-},
+      const user = await prisma.user.findUnique({
+        where: { email },
+      });
 
-  async  resetPassword(req, res) {
-  try {
-    const { email, newPassword } = req.body;
-    // console.log("Pass",newPassword)
+      if (
+        !user ||
+        !user.resetPasswordToken ||
+        user.resetPasswordExpiry < new Date()
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Invalid or expired reset code" });
+      }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    if (!user || !user.resetPasswordToken || user.resetPasswordExpiry < new Date()) {
-      return res.status(400).json({ message: "Invalid or expired reset code" });
+      await prisma.user.update({
+        where: { email },
+        data: {
+          password: hashedPassword,
+          resetPasswordToken: null,
+          resetPasswordExpiry: null,
+        },
+      });
+
+      res.status(200).json({ message: "Password reset successful" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
     }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    await prisma.user.update({
-      where: { email },
-      data: {
-        password: hashedPassword,
-        resetPasswordToken: null,
-        resetPasswordExpiry: null,
-      },
-    });
-
-    res.status(200).json({ message: "Password reset successful" });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-}
+  },
 };
 export default userController;

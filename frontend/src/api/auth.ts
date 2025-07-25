@@ -1,19 +1,4 @@
-import axios from "axios";
-
-const BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/v1";
-
-const api = axios.create({
-  baseURL: BASE_URL,
-});
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+import api from "./axiosInstance";
 
 export const sendOtp = (email: string) =>
   api.get(`/auth/send-otp?email=${email}`);
@@ -33,4 +18,4 @@ export const login = (data: { email: string; password: string }) =>
 
 export const getCurrentUser = () => api.get("/auth/me");
 
-export const logout = () => api.post("/auth/logout"); // optional
+export const logout = () => api.post("/auth/logout");
