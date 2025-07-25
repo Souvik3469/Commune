@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import { PrismaClient } from "@prisma/client";
 
 import bcrypt from "bcrypt";
-
+import { sendOTPEmail } from "../../services/EmailService";
 import createError from "http-errors";
 import ms from "ms";
 import { customResponse } from "../../../utils/Response";
@@ -11,6 +11,65 @@ import { genOtp, sendEmail } from "../../utils/utils";
 const prisma = new PrismaClient();
 
 const loginController = {
+  async register(req, res, next) {
+    try {
+      const resp = req.body;
+
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          email: resp.email,
+        },
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          message: "User already exists",
+        });
+      }
+
+      const userCount = await prisma.user.count({
+        where: {
+          name: resp.name,
+        },
+      });
+
+      const username = `@${resp.name}${userCount + 1}`.toLowerCase();
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(resp.password, salt);
+
+      const createdUser = await prisma.user.create({
+        data: {
+          email: resp.email,
+          name: resp.name,
+          password: hashedPassword,
+          username,
+        },
+      });
+
+      const accessToken = jwt.sign(
+        createdUser.id,
+        process.env.USER_ACCESS_SECRET
+      );
+
+      res.cookie("accessToken", accessToken, {
+        maxAge: ms("30m"),
+        httpOnly: true,
+      });
+
+      res.status(200).json({
+        message: "User created successfully",
+        data: { createdUser, accessToken },
+      });
+    } catch (err) {
+      console.log(err);
+      res.status(400).json({
+        message: "An error occurred",
+        error: err.message,
+      });
+    }
+  },
+
   async login(req, res, next) {
     try {
       const { email, password } = await req.body;
@@ -55,6 +114,7 @@ const loginController = {
       return next(createError.InternalServerError());
     }
   },
+
   async sendOTP(req, res, next) {
     try {
       const { email } = req.query;
@@ -76,11 +136,12 @@ const loginController = {
       console.log(email);
 
       // Send OTP via email
-      await sendEmail(
-        email,
-        "OTP Verification from DuoCortex",
-        `<p>Your OTP is: <strong>${otp}</strong></p>`
-      );
+      // await sendEmail(
+      //   email,
+      //   "OTP Verification from DuoCortex",
+      //   `<p>Your OTP is: <strong>${otp}</strong></p>`
+      // );
+      sendOTPEmail(otp, email, "User1 name");
 
       res.status(200).json({ success: true, message: "OTP sent successfully" });
     } catch (error) {
@@ -118,73 +179,5 @@ const loginController = {
       res.status(500).json({ success: false, error: "Internal server error" });
     }
   },
-  async register(req, res, next) {
-  try {
-    const resp = req.body;
-
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        email: resp.email,
-      },
-    });
-
-    if (existingUser) {
-      return res.status(400).json({
-        message: "User already exists",
-      });
-    }
-
-    
-    const userCount = await prisma.user.count({
-      where: {
-        name: resp.name,
-      },
-    });
-
-   
-const username = `@${resp.name}${userCount + 1}`.toLowerCase();
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(resp.password, salt);
-
-    const createdUser = await prisma.user.create({
-      data: {
-        email: resp.email,
-        name: resp.name,
-        gender: resp.gender,
-        password: hashedPassword,
-        username, 
-        rating: 5, 
-      },
-    });
-
-    await prisma.wallet.create({
-      data: {
-        userId: createdUser.id,
-        balance_coins: 100,
-        balance_inr: 0,
-      },
-    });
-
-    res.status(200).json({
-      message: "User created successfully",
-      createdUser,
-    });
-  } catch (err) {
-    console.log(err);
-    res.status(400).json({
-      message: "An error occurred",
-      error: err.message,
-    });
-  }
-},
-
 };
 export default loginController;
-
-// api -> redirect url client-secret diye
-// after auth
-// localstorage --> auth_type = google
-
-// auth_type to backend  -> google + token
-// deligated credentials -> user data

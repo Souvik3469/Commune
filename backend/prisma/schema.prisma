@@ -11,28 +11,38 @@ datasource db {
 }
 
 model User {
-    id       String  @id @default(auto()) @map("_id") @db.ObjectId
-    name     String
-    email    String  @unique
-    username String?
-
+    id                  String              @id @default(auto()) @map("_id") @db.ObjectId
+    name                String
+    email               String              @unique
+    username            String?
     password            String
     googleId            String?
     dob                 DateTime?
     active              Boolean             @default(false)
-
     createdAt           DateTime            @default(now())
     bio                 String?
+    profilePic          String?
     updatedAt           DateTime            @updatedAt
     messages            Message[]
     phoneNumber         String?
     chats               Chat[]              @relation(fields: [chatIds], references: [id])
     chatIds             String[]            @db.ObjectId
     groupChats          Chat[]              @relation("GroupChats")
-   
     MessageReadStatus   MessageReadStatus[]
     resetPasswordToken  String?
     resetPasswordExpiry DateTime?
+    deletedChats        DeletedChat[]
+}
+
+model DeletedChat {
+    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    userId    String   @db.ObjectId
+    chatId    String   @db.ObjectId
+    deletedAt DateTime
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+    @@unique([userId, chatId])
 }
 
 model Chat {
@@ -48,6 +58,7 @@ model Chat {
     inviteTokens InviteToken[]
     userIds      String[]      @db.ObjectId
     users        User[]        @relation(fields: [userIds], references: [id])
+    deletedChats DeletedChat[]
 }
 
 model Message {
@@ -78,5 +89,12 @@ model InviteToken {
     chatId    String
     chat      Chat     @relation(fields: [chatId], references: [id])
     expiresAt DateTime
+    createdAt DateTime @default(now())
+}
+
+model Otp {
+    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    email     String
+    otp       String
     createdAt DateTime @default(now())
 }
