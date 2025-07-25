@@ -8,7 +8,7 @@ export function sendOTPEmail(otp, recipientEmail, recipientName) {
     path: "/api/v5/email/send",
     headers: {
       accept: "application/json",
-      authkey: "429576Ad3trg3tn66d9b0f8P1", 
+      authkey: process.env.AUTH_KEY", 
       "content-type": "application/JSON"
     }
   };
