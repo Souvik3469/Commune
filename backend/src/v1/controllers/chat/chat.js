@@ -190,6 +190,76 @@ const chatController = {
     }
   },
 
+  async getChatById(req, res, next) {
+    try {
+      const userId = req.user.id;
+      const { chatId } = req.params;
+
+      // Step 1: Find the chat
+      const chat = await prisma.chat.findUnique({
+        where: {
+          id: chatId,
+          userIds: {
+            has: userId,
+          },
+        },
+        include: {
+          users: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              profilePic: true,
+            },
+          },
+          messages: {
+            orderBy: {
+              timestamp: "desc",
+            },
+            take: 1,
+          },
+        },
+      });
+
+      if (!chat) {
+        return res.status(404).json({ message: "Chat not found" });
+      }
+
+      // Step 2: Check if user deleted the chat
+      const deletedChat = await prisma.deletedChat.findUnique({
+        where: {
+          userId_chatId: {
+            userId,
+            chatId,
+          },
+        },
+      });
+
+      if (deletedChat) {
+        const latestMessage = await prisma.message.findFirst({
+          where: {
+            chatId,
+            timestamp: {
+              gt: deletedChat.deletedAt,
+            },
+          },
+          orderBy: {
+            timestamp: "desc",
+          },
+        });
+
+        // If no message after deletion, return 204 No Content
+        if (!latestMessage) {
+          return res.status(204).json(null);
+        }
+      }
+
+      res.json(chat);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  },
   async getRooms(req, res, next) {
     try {
       const userId = req.user.id;
@@ -515,6 +585,7 @@ const chatController = {
               profilePic: true,
             },
           },
+          chat: true,
         },
       });
 

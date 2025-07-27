@@ -11,6 +11,7 @@ import {
   getAllMessages,
   createChat,
   deleteChat,
+  getChatById,
 } from "../api/chat";
 
 // Get all one-to-one chats
@@ -35,6 +36,14 @@ export const useCreateChat = () => {
       // invalidate to refetch the new chat list
       queryClient.invalidateQueries({ queryKey: ["one-to-one-chats"] });
     },
+  });
+};
+
+export const useChatById = (chatId: string) => {
+  return useQuery({
+    queryKey: ["chat", chatId],
+    queryFn: () => getChatById(chatId),
+    enabled: !!chatId,
   });
 };
 

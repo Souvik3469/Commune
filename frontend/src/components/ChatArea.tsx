@@ -2,7 +2,7 @@ import { FC, useEffect, useRef, useState } from "react";
 import Ably from "ably";
 import type { Message as AblyMessage } from "ably";
 import { useMyDetails } from "../hooks/userHooks";
-import { useMessages } from "../hooks/chatHooks";
+import { useChatById, useMessages } from "../hooks/chatHooks";
 import { useQueryClient, InfiniteData } from "@tanstack/react-query";
 
 const MSG_GROUP_TIME = 2 * 60 * 1000;
@@ -32,12 +32,15 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const isInitialLoadRef = useRef(true);
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [isTyping, setIsTyping] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useMessages(chatId);
+  const { data: chatData, isLoading: isChatLoading } = useChatById(chatId);
+  const isGroupChat = chatData?.isGroup;
 
   const messages = data?.pages.flatMap((page) => page.messages).reverse() || [];
 
@@ -45,7 +48,7 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
     if (messages.length > 0 && !isFetchingNextPage) {
       scrollToBottom();
     }
-  }, [messages.length, isFetchingNextPage, chatId]);
+  }, [messages.length, isFetchingNextPage, chatId, scrollToBottom]);
 
   // Scroll to bottom only once on initial load
   useEffect(() => {
@@ -53,7 +56,7 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
       bottomRef.current?.scrollIntoView({ behavior: "auto" });
       isInitialLoadRef.current = false;
     }
-  }, [messages.length, chatId]);
+  }, [messages.length, chatId, bottomRef]);
 
   // Infinite scroll fetch
   useEffect(() => {
@@ -103,13 +106,14 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
 
         const updatedLastPage = {
           ...lastPage,
-          messages: [...lastPage.messages, newMessage],
+          messages: [newMessage, ...lastPage.messages],
         };
 
         pages[lastPageIndex] = updatedLastPage;
         return { ...oldData, pages };
       });
 
+      // Auto-scroll only if user is near the bottom
       const container = containerRef.current;
       if (
         container &&
@@ -123,38 +127,59 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
     };
 
     const onTyping = (msg: AblyMessage) => {
-      const { typing, userId: senderId } = msg.data || {};
+      const { typing, userId: senderId, userName } = msg.data || {};
 
+      // Ignore self
       if (!senderId || senderId === user.id) return;
 
-      if (typing) {
-        setIsTyping(true);
-        scrollToBottom();
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-
-        typingTimeoutRef.current = setTimeout(() => {
-          setIsTyping(false);
-        }, TYPING_DELAY); // 👈 Extend duration after last "typing" signal
-      } else {
-        setIsTyping(false); // 👈 Respond immediately to "typing: false"
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
+      setTypingUsers((prev) => {
+        const updated = new Set(prev);
+        if (typing) {
+          updated.add(userName);
+        } else {
+          updated.delete(userName);
         }
+        return updated;
+      });
+
+      // Clear existing timeout
+      if (typingTimeouts.current[senderId]) {
+        clearTimeout(typingTimeouts.current[senderId]);
+      }
+
+      if (typing) {
+        typingTimeouts.current[senderId] = setTimeout(() => {
+          setTypingUsers((prev) => {
+            const updated = new Set(prev);
+            updated.delete(userName);
+            return updated;
+          });
+          delete typingTimeouts.current[senderId];
+        }, TYPING_DELAY);
+      } else {
+        delete typingTimeouts.current[senderId];
       }
     };
 
+    // Subscribe to Ably events
     channel.subscribe("message", onNewMessage);
     channel.subscribe("typing", onTyping);
 
+    // Cleanup
     return () => {
       channel.unsubscribe("message", onNewMessage);
       channel.unsubscribe("typing", onTyping);
       ably.close();
+
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
+
+      // Clear all typing timeouts
+      Object.values(typingTimeouts.current).forEach(clearTimeout);
+      typingTimeouts.current = {};
     };
-  }, [chatId, user?.id, queryClient, bottomRef]);
+  }, [chatId, user?.id, queryClient, bottomRef, containerRef, setTypingUsers]);
 
   useEffect(() => {
     isInitialLoadRef.current = true;
@@ -164,13 +189,20 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
     return <p>Loading user...</p>;
   }
 
-  if (isLoading) {
+  if (isLoading || isChatLoading) {
     return (
       <div className="h-[82%] flex items-center justify-center text-gray-500 dark:text-gray-400">
         Loading messages...
       </div>
     );
   }
+  // if (isChatLoading) {
+  //   return (
+  //     <div className="h-[82%] flex items-center justify-center text-gray-500 dark:text-gray-400">
+  //       Loading chat details...
+  //     </div>
+  //   );
+  // }
 
   return (
     <div
@@ -261,9 +293,13 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
         );
       })}
 
-      {isTyping && (
+      {typingUsers.size > 0 && (
         <div className="text-sm text-gray-500 dark:text-gray-400 px-4 py-2">
-          Typing...
+          {isGroupChat
+            ? `${Array.from(typingUsers).join(", ")} ${
+                typingUsers.size === 1 ? "is" : "are"
+              } typing...`
+            : "Typing..."}
         </div>
       )}
 

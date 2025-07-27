@@ -44,4 +44,6 @@ router.post(
   chatController.acceptInviteLink
 );
 
+router.get("/:chatId", authMiddleware, chatController.getChatById);
+
 export default router;

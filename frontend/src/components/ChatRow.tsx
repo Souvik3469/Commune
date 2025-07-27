@@ -39,9 +39,9 @@ const ChatRow: FC<ChatRowProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const typingTimeout = useRef<NodeJS.Timeout | null>(null);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const typingTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
   const ablyRef = useRef<Ably.Realtime | null>(null);
-
   const menuRef = useRef<HTMLDivElement>(null);
 
   const handleConfirm = () => {
@@ -65,24 +65,43 @@ const ChatRow: FC<ChatRowProps> = ({
     const channel = ablyRef.current.channels.get(`chat-${chatId}`);
 
     const handleTyping = (msg: AblyMessage) => {
-      const { userId: senderId } = msg.data || {};
-      if (senderId === user.id) return;
+      const { userId: senderId, userName } = msg.data || {};
+      if (senderId === user?.id || !userName) return;
 
-      setIsTyping(true);
-      if (typingTimeout.current) clearTimeout(typingTimeout.current);
-      typingTimeout.current = setTimeout(() => {
-        setIsTyping(false);
-      }, TYPING_DELAY);
+      if (isGroup) {
+        setTypingUsers((prev) => {
+          const set = new Set(prev);
+          set.add(userName);
+          return Array.from(set);
+        });
+
+        if (typingTimeouts.current[senderId]) {
+          clearTimeout(typingTimeouts.current[senderId]);
+        }
+
+        typingTimeouts.current[senderId] = setTimeout(() => {
+          setTypingUsers((prev) => prev.filter((name) => name !== userName));
+          delete typingTimeouts.current[senderId];
+        }, TYPING_DELAY);
+      } else {
+        setIsTyping(true);
+        if (typingTimeouts.current["single"])
+          clearTimeout(typingTimeouts.current["single"]);
+        typingTimeouts.current["single"] = setTimeout(() => {
+          setIsTyping(false);
+        }, TYPING_DELAY);
+      }
     };
 
     channel.subscribe("typing", handleTyping);
 
     return () => {
       channel.unsubscribe("typing", handleTyping);
-      if (typingTimeout.current) clearTimeout(typingTimeout.current);
+      Object.values(typingTimeouts.current).forEach(clearTimeout);
+      typingTimeouts.current = {};
       ablyRef.current?.close();
     };
-  }, [chatId, user]);
+  }, [chatId, user?.id, isGroup]);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -98,13 +117,26 @@ const ChatRow: FC<ChatRowProps> = ({
     return <p>Loading user...</p>;
   }
 
+  const typingDisplay = isGroup
+    ? typingUsers.length > 0 && (
+        <span
+          className="italic text-blue-600 truncate block"
+          title={`${typingUsers.join(", ")} ${
+            typingUsers.length === 1 ? "is" : "are"
+          } typing...`}
+        >
+          {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"}{" "}
+          typing...
+        </span>
+      )
+    : isTyping && <span className="italic text-blue-600">Typing...</span>;
+
   return (
     <div className="relative group">
       <div
         onClick={onClick}
         className="grid grid-cols-12 items-center px-3 py-2 hover:bg-blue-100 dark:hover:bg-[#1e1e3f] cursor-pointer transition-all"
       >
-        {/* Checkbox (if in selectable mode) */}
         {selectable && (
           <div className="col-span-1 flex justify-center">
             <div
@@ -119,7 +151,6 @@ const ChatRow: FC<ChatRowProps> = ({
           </div>
         )}
 
-        {/* Avatar */}
         <div
           className={`${
             selectable ? "col-span-2" : "col-span-2"
@@ -132,7 +163,6 @@ const ChatRow: FC<ChatRowProps> = ({
           />
         </div>
 
-        {/* Name and Message */}
         <div
           className={`${
             selectable ? "col-span-6" : "col-span-7"
@@ -159,15 +189,10 @@ const ChatRow: FC<ChatRowProps> = ({
                 : "text-gray-600 dark:text-gray-400"
             }`}
           >
-            {isTyping ? (
-              <span className="italic text-blue-600">Typing...</span>
-            ) : (
-              message
-            )}
+            {typingDisplay || message}
           </div>
         </div>
 
-        {/* Time + More Options */}
         <div className="col-span-3 flex items-center justify-end relative space-x-2">
           <span
             className={`text-xs ${
@@ -194,7 +219,6 @@ const ChatRow: FC<ChatRowProps> = ({
         </div>
       </div>
 
-      {/* Dropdown Menu */}
       {showMenu && (
         <div
           ref={menuRef}
