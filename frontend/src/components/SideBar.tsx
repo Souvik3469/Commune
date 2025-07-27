@@ -17,6 +17,7 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
 import ThemeToggleButton from "./ThemeToggleButton";
+import { useMyDetails } from "../hooks/userHooks";
 
 type MenuItem = {
   id: string;
@@ -84,6 +85,11 @@ const SideBar: FC<SideBarProps> = ({
   setIsOpen,
 }) => {
   const navigate = useNavigate();
+  const { data: user, isLoading } = useMyDetails();
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
   const handleLogout = () => {
     localStorage.removeItem("accessToken");
@@ -144,10 +150,11 @@ const SideBar: FC<SideBarProps> = ({
 
         <div className="mx-2 my-14 sm:mx-6 sm:my-10">
           <img
-            src="https://i.pravatar.cc/150?img=58"
-            className="w-8 h-8 sm:w-12 sm:h-12 rounded-full"
-            alt="Avatar"
+            src={user?.profilePic}
+            alt={user?.name || "Avatar"}
+            className="w-12 h-12 rounded-full"
           />
+          <div>{user.name}</div>
         </div>
 
         <div className="space-y-4 pt-6">{menuItems.map(renderMenuItem)}</div>

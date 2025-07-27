@@ -1,22 +1,47 @@
 import express from "express";
-
 import authMiddleware from "../middlewares/Auth.middleware";
 import chatController from "../controllers/chat/chat";
 
 const router = express.Router();
-router.post('/create-chat', authMiddleware,chatController.createChat );
-router.get('/get-chats', authMiddleware,chatController.getChats);
-router.get('/get-rooms', authMiddleware,chatController.getRooms);
-router.delete('/delete-chat/:chatId', authMiddleware,chatController.deleteChat);
-router.post('/create-message', authMiddleware, chatController.createMessage);
-router.get('/get-messages/:chatId', authMiddleware, chatController.getMessagesByChat);
-router.get('/get-unreadmessage/:chatId', authMiddleware, chatController.getUnreadMessages);
 
-router.patch('/update-grpchat/:chatId', authMiddleware, chatController.updateGroupChat);
-router.patch('/remove-members/:chatId', authMiddleware, chatController.removeGroupMembers);
-router.put('/update-status/:chatId', authMiddleware, chatController.updateMessageStatus);
-router.post('/generate-invite/:chatId', authMiddleware, chatController.generateInvite);
-router.post('/accept-invite/:inviteToken', authMiddleware, chatController.acceptInviteLink);
+// 📁 Chat creation & fetching
+router.post("/create", authMiddleware, chatController.createChat);
+router.get("/get-chats", authMiddleware, chatController.getChats); // one-to-one
+router.get("/get-rooms", authMiddleware, chatController.getRooms); // group chats
+router.delete("/:chatId", authMiddleware, chatController.deleteChat); // delete chat
 
+// 📁 Messages
+router.post("/send", authMiddleware, chatController.createMessage);
+router.get(
+  "/:chatId/messages",
+  authMiddleware,
+  chatController.getMessagesByChat
+);
+router.get("/:chatId/unread", authMiddleware, chatController.getUnreadMessages);
+router.put(
+  "/:chatId/status",
+  authMiddleware,
+  chatController.updateMessageStatus
+);
+
+// 📁 Group chat management
+router.patch("/:chatId/update", authMiddleware, chatController.updateGroupChat);
+router.patch(
+  "/:chatId/remove-members",
+  authMiddleware,
+  chatController.removeGroupMembers
+);
+
+// 📁 Group invite links
+router.post(
+  "/:chatId/invite-link",
+  authMiddleware,
+  chatController.generateInvite
+);
+router.post(
+  "/accept-invite/:inviteToken",
+  authMiddleware,
+  chatController.acceptInviteLink
+);
 
 export default router;
