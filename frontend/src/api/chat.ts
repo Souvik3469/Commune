@@ -24,6 +24,12 @@ export const createChat = async (data: {
   console.log("RES", res.data);
   return res.data;
 };
+
+export const getChatById = async (chatId: string) => {
+  const res = await api.get(`/chat/${chatId}`);
+  return res.data;
+};
+
 // Delete chat
 export const deleteChat = async (chatId: string) => {
   const res = await api.delete(`/chat/${chatId}`);

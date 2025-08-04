@@ -154,7 +154,7 @@ const SideBar: FC<SideBarProps> = ({
             alt={user?.name || "Avatar"}
             className="w-12 h-12 rounded-full"
           />
-          <div>{user.name}</div>
+          <div>{user?.name}</div>
         </div>
 
         <div className="space-y-4 pt-6">{menuItems.map(renderMenuItem)}</div>

@@ -2,11 +2,15 @@ import { IoSearch } from "react-icons/io5";
 import logo from "../assets/logo1.png";
 import ChatSection from "./ChatSection";
 import { FaPlus } from "react-icons/fa6";
-import { FC, useState } from "react";
+import { FC, useEffect, useMemo, useRef, useState } from "react";
 import { useAllChats, useCreateChat, useGroupChats } from "../hooks/chatHooks"; // <-- using dynamic hooks
 import { useMyDetails, useUserSearch } from "../hooks/userHooks";
 import { ChatPreview } from "../types/chat";
 import { formatDistanceToNow } from "date-fns";
+import Ably from "ably";
+import type { Message as AblyMessage } from "ably";
+
+const MAX_MSG_LENGTH = 30;
 
 type AllChatsProps = {
   className?: string;
@@ -47,6 +51,7 @@ type TransformedChat = {
 
 const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
   const { data: user } = useMyDetails();
+
   const {
     data: oneToOneChats = [],
     isLoading: loadingOneToOne,
@@ -62,6 +67,51 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+
+  // ✅ updatedChats now stores content & timestamp
+  const [updatedChats, setUpdatedChats] = useState<
+    Record<string, { content: string; timestamp: string }>
+  >({});
+
+  const ablyRef = useRef<Ably.Realtime | null>(null);
+
+  // ✅ Subscribe to Ably for real-time updates
+  useEffect(() => {
+    ablyRef.current = new Ably.Realtime({
+      key: import.meta.env.VITE_ABLY_API_KEY!,
+      echoMessages: true,
+    });
+
+    const ably = ablyRef.current;
+    const allChats = [...oneToOneChats, ...groupChats];
+
+    allChats.forEach((chat) => {
+      const channel = ably.channels.get(`chat-${chat.id}`);
+
+      channel.subscribe("new-message", (message: AblyMessage) => {
+        const data = message.data;
+        if (data?.content && data?.createdAt) {
+          setUpdatedChats((prev) => ({
+            ...prev,
+            [chat.id]: {
+              content: data.content,
+              timestamp: data.createdAt,
+            },
+          }));
+        }
+      });
+    });
+
+    return () => {
+      allChats.forEach((chat) => {
+        const channel = ably.channels.get(`chat-${chat.id}`);
+        channel.unsubscribe();
+        channel.detach();
+      });
+      ably.close();
+    };
+  }, [oneToOneChats, groupChats]);
+
   const createChatMutation = useCreateChat();
   const { data: searchResults = [] } = useUserSearch(searchQuery);
 
@@ -73,7 +123,6 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
       });
       setSearchQuery("");
       setSelectedChat(newChat);
-      console.log("NEW", newChat);
     } catch (err) {
       console.error("Chat creation failed", err);
     }
@@ -106,8 +155,7 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
     }
   };
 
-  const MAX_MSG_LENGTH = 30;
-
+  // ✅ Transform chats using updated content & timestamp
   const transformChats = (
     chats: Chat[],
     isGroup: boolean,
@@ -115,7 +163,13 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
   ): TransformedChat[] => {
     const transformed: (TransformedChat | null)[] = chats.map((chat) => {
       const latestMsg = chat.messages?.[0];
-      const time = latestMsg
+      const updated = updatedChats[chat.id];
+
+      const time = updated?.timestamp
+        ? formatDistanceToNow(new Date(updated.timestamp), {
+            addSuffix: true,
+          })
+        : latestMsg
         ? formatDistanceToNow(new Date(latestMsg.timestamp), {
             addSuffix: true,
           })
@@ -127,7 +181,7 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
 
       if (!isGroup && !otherUser) return null;
 
-      const rawMessage = latestMsg?.content || "";
+      const rawMessage = updated?.content || latestMsg?.content || "";
       const croppedMessage =
         rawMessage.length > MAX_MSG_LENGTH
           ? rawMessage.slice(0, MAX_MSG_LENGTH) + "..."
@@ -159,8 +213,15 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
     return transformed.filter((chat): chat is TransformedChat => chat !== null);
   };
 
-  const transformedGroups = transformChats(groupChats, true, user?.id);
-  const transformedOneToOne = transformChats(oneToOneChats, false, user?.id);
+  const transformedGroups = useMemo(
+    () => transformChats(groupChats, true, user?.id),
+    [groupChats, user?.id, updatedChats]
+  );
+
+  const transformedOneToOne = useMemo(
+    () => transformChats(oneToOneChats, false, user?.id),
+    [oneToOneChats, user?.id, updatedChats]
+  );
 
   console.log("TRANSFORM", transformedOneToOne);
 
