@@ -6,44 +6,66 @@ import { sendOTPEmail } from "../../services/EmailService";
 import createError from "http-errors";
 import ms from "ms";
 import { customResponse } from "../../../utils/Response";
-import { genOtp, sendEmail } from "../../utils/utils";
+import { genOtp } from "../../utils/utils";
+import fs from "fs";
+import path from "path";
+import cloudinary from "../../utils/cloudinary";
 
 const prisma = new PrismaClient();
 
 const loginController = {
-  async register(req, res, next) {
+  async register(req, res) {
     try {
-      const resp = req.body;
+      const { name, email, password, gender } = req.body;
+      const defaultAvatar =
+        "https://static.vecteezy.com/system/resources/thumbnails/009/292/244/small_2x/default-avatar-icon-of-social-media-user-vector.jpg";
 
-      const existingUser = await prisma.user.findFirst({
-        where: {
-          email: resp.email,
-        },
-      });
-
-      if (existingUser) {
-        return res.status(400).json({
-          message: "User already exists",
-        });
+      if (!name || !email || !password || !gender) {
+        return res
+          .status(400)
+          .json({ message: "All fields except profilePic are required" });
       }
 
-      const userCount = await prisma.user.count({
-        where: {
-          name: resp.name,
-        },
-      });
+      let profilePic = defaultAvatar;
 
-      const username = `@${resp.name}${userCount + 1}`.toLowerCase();
+      if (req.file) {
+        const localPath = path.join(
+          __dirname,
+          "..",
+          "..",
+          "uploads",
+          req.file.filename
+        );
 
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(resp.password, salt);
+        const uploadResult = await cloudinary.uploader.upload(localPath, {
+          folder: "profile_pics",
+        });
+
+        profilePic = uploadResult.secure_url;
+
+        // Delete local file after upload
+        fs.unlinkSync(localPath);
+      }
+
+      const existingUser = await prisma.user.findFirst({ where: { email } });
+
+      if (existingUser) {
+        return res.status(400).json({ message: "User already exists" });
+      }
+
+      const userCount = await prisma.user.count({ where: { name } });
+      const username = `@${name}${userCount + 1}`.toLowerCase();
+
+      const hashedPassword = await bcrypt.hash(password, 10);
 
       const createdUser = await prisma.user.create({
         data: {
-          email: resp.email,
-          name: resp.name,
+          email,
+          name,
           password: hashedPassword,
           username,
+          // gender,
+          profilePic,
         },
       });
 
@@ -53,20 +75,19 @@ const loginController = {
       );
 
       res.cookie("accessToken", accessToken, {
-        maxAge: ms("30m"),
+        maxAge: 30 * 60 * 1000,
         httpOnly: true,
       });
 
-      res.status(200).json({
+      return res.status(200).json({
         message: "User created successfully",
         data: { createdUser, accessToken },
       });
     } catch (err) {
-      console.log(err);
-      res.status(400).json({
-        message: "An error occurred",
-        error: err.message,
-      });
+      console.error(err);
+      return res
+        .status(500)
+        .json({ message: "Something went wrong", error: err.message });
     }
   },
 

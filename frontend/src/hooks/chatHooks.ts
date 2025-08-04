@@ -12,7 +12,15 @@ import {
   createChat,
   deleteChat,
   getChatById,
+  updateChat,
 } from "../api/chat";
+
+type UpdateChatPayload = {
+  name?: string;
+  logo?: File | null;
+  addUserIds?: string[];
+  removeUserIds?: string[];
+};
 
 // Get all one-to-one chats
 export const useAllChats = () =>
@@ -30,15 +38,31 @@ export const useGroupChats = () =>
 
 export const useCreateChat = () => {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: createChat,
     onSuccess: () => {
-      // invalidate to refetch the new chat list
       queryClient.invalidateQueries({ queryKey: ["one-to-one-chats"] });
     },
   });
 };
 
+export const useUpdateChat = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      chatId,
+      data,
+    }: {
+      chatId: string;
+      data: UpdateChatPayload;
+    }) => updateChat(chatId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(); // Invalidate chat query to refetch
+    },
+  });
+};
 export const useChatById = (chatId: string) => {
   return useQuery({
     queryKey: ["chat", chatId],

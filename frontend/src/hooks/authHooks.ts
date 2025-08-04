@@ -25,12 +25,7 @@ export const useVerifyOtp = () =>
 // Register
 export const useRegister = () =>
   useMutation({
-    mutationFn: (data: {
-      name: string;
-      email: string;
-      password: string;
-      gender: string;
-    }) => register(data),
+    mutationFn: (formData: FormData) => register(formData),
   });
 
 // Login

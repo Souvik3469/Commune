@@ -13,4 +13,5 @@ export type ChatPreview = {
   logo?: string;
   userIds: string[];
   users: UserPreview[];
+  adminId?: string;
 };

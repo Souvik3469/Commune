@@ -14,3 +14,12 @@ export const searchUsers = async (query: string) => {
   const res = await api.get(`/user/search?query=${encodeURIComponent(query)}`);
   return res.data; // List of users
 };
+
+export const updateProfile = async (formData: FormData) => {
+  const res = await api.patch("/user/update-profile", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return res.data;
+};

@@ -13,6 +13,9 @@ const Register = () => {
     gender: "",
   });
 
+  const [profilePic, setProfilePic] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+
   const { mutate: registerUser, isPending } = useRegister();
 
   const handleRegister = () => {
@@ -23,7 +26,16 @@ const Register = () => {
       return;
     }
 
-    registerUser(form, {
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("email", email);
+    formData.append("password", password);
+    formData.append("gender", gender);
+    if (profilePic) {
+      formData.append("profilePic", profilePic);
+    }
+
+    registerUser(formData, {
       onSuccess: () => {
         toast.success("Registration successful");
         navigate("/login");
@@ -42,34 +54,80 @@ const Register = () => {
           Register
         </h2>
 
+        {/* Name */}
+        <label className="block text-sm font-medium text-gray-700">Name</label>
         <input
           type="text"
-          placeholder="Name"
           className="w-full border px-3 py-2 rounded"
+          placeholder="Your name"
           onChange={(e) => setForm({ ...form, name: e.target.value })}
         />
+
+        {/* Email */}
+        <label className="block text-sm font-medium text-gray-700">Email</label>
         <input
           type="email"
-          placeholder="Email"
           className="w-full border px-3 py-2 rounded"
+          placeholder="Your email"
           onChange={(e) => setForm({ ...form, email: e.target.value })}
         />
+
+        {/* Password */}
+        <label className="block text-sm font-medium text-gray-700">
+          Password
+        </label>
         <input
           type="password"
-          placeholder="Password"
           className="w-full border px-3 py-2 rounded"
+          placeholder="Password"
           onChange={(e) => setForm({ ...form, password: e.target.value })}
         />
+
+        {/* Gender */}
+        <label className="block text-sm font-medium text-gray-700">
+          Gender
+        </label>
         <select
           className="w-full border px-3 py-2 rounded"
+          value={form.gender}
           onChange={(e) => setForm({ ...form, gender: e.target.value })}
         >
           <option value="">Select Gender</option>
-          <option>Male</option>
-          <option>Female</option>
-          <option>Other</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Other">Other</option>
         </select>
 
+        {/* Profile Picture */}
+        <label className="block text-sm font-medium text-gray-700">
+          Profile Picture (optional)
+        </label>
+        <input
+          type="file"
+          accept="image/*"
+          className="w-full"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              setProfilePic(file);
+              setPreviewUrl(URL.createObjectURL(file));
+            }
+          }}
+        />
+
+        {/* Image Preview */}
+        {previewUrl && (
+          <div className="mt-2">
+            <p className="text-sm text-gray-600 mb-1">Preview:</p>
+            <img
+              src={previewUrl}
+              alt="Preview"
+              className="h-20 w-20 object-cover rounded-full border"
+            />
+          </div>
+        )}
+
+        {/* Register Button */}
         <button
           className={`w-full text-white py-2 rounded ${
             isPending
@@ -82,6 +140,7 @@ const Register = () => {
           {isPending ? "Registering..." : "Register"}
         </button>
 
+        {/* Link to Login */}
         <p className="text-sm text-center text-gray-600">
           Already have an account?{" "}
           <Link

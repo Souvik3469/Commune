@@ -6,12 +6,12 @@ export const sendOtp = (email: string) =>
 export const verifyOtp = (email: string, otp: string) =>
   api.post(`/auth/verify-otp?email=${email}`, { otp });
 
-export const register = (data: {
-  name: string;
-  email: string;
-  password: string;
-  gender: string;
-}) => api.post("/auth/register", data);
+export const register = (formData: FormData) =>
+  api.post("/auth/register", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
 
 export const login = (data: { email: string; password: string }) =>
   api.post("/auth/login", data);

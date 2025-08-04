@@ -1,11 +1,25 @@
 import express from "express";
 import authMiddleware from "../middlewares/Auth.middleware";
 import chatController from "../controllers/chat/chat";
+import upload from "../middlewares/upload";
 
 const router = express.Router();
 
 // 📁 Chat creation & fetching
-router.post("/create", authMiddleware, chatController.createChat);
+router.post(
+  "/create",
+  authMiddleware,
+  upload.single("logo"),
+  chatController.createChat
+);
+
+router.put(
+  "/update/:chatId",
+  authMiddleware,
+  upload.single("logo"),
+  chatController.updateGroupChat
+);
+
 router.get("/get-chats", authMiddleware, chatController.getChats); // one-to-one
 router.get("/get-rooms", authMiddleware, chatController.getRooms); // group chats
 router.delete("/:chatId", authMiddleware, chatController.deleteChat); // delete chat
@@ -25,7 +39,12 @@ router.put(
 );
 
 // 📁 Group chat management
-router.patch("/:chatId/update", authMiddleware, chatController.updateGroupChat);
+router.patch(
+  "/:chatId/update",
+  authMiddleware,
+  upload.single("logo"),
+  chatController.updateGroupChat
+);
 router.patch(
   "/:chatId/remove-members",
   authMiddleware,

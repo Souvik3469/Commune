@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { myDetails, searchUsers } from "../api/user";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { myDetails, searchUsers, updateProfile } from "../api/user";
 
 export const useMyDetails = () =>
   useQuery({
@@ -19,3 +19,8 @@ export const useUserSearch = (query: string) => {
     enabled: !!query,
   });
 };
+
+export const useUpdateProfile = () =>
+  useMutation({
+    mutationFn: (formData: FormData) => updateProfile(formData),
+  });

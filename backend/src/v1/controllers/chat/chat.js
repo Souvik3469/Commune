@@ -4,24 +4,41 @@ const { generateInviteLink } = require("../../../utils/InviteLink");
 
 const prisma = new PrismaClient();
 const ably = new Ably.Realtime(process.env.ABLY_API_KEY);
+import fs from "fs";
+import path from "path";
+import cloudinary from "../../utils/cloudinary";
 
 const chatController = {
   async createChat(req, res, next) {
     try {
-      let { userIds, isGroup, name, logo, usernames } = req.body;
+      let { userIds, isGroup, name, usernames } = req.body;
       const currentUserId = req.user.id;
 
-      // Validate group chat name
+      const defaultGroupLogo = "https://www.tenniscall.com/images/chat.jpg";
+      let logoUrl = defaultGroupLogo;
+
+      if (req.file) {
+        const localPath = path.join(
+          __dirname,
+          "..",
+          "..",
+          "uploads",
+          req.file.filename
+        );
+        const uploadResult = await cloudinary.uploader.upload(localPath, {
+          folder: "grp_chat_logos",
+        });
+        logoUrl = uploadResult.secure_url;
+        fs.unlinkSync(localPath); // remove file
+      }
+
       if (isGroup && !name) {
         return res.status(400).json({ error: "Group chats must have a name." });
       }
 
-      // Resolve usernames to userIds
       if (usernames) {
         const users = await prisma.user.findMany({
-          where: {
-            username: { in: usernames, mode: "insensitive" },
-          },
+          where: { username: { in: usernames, mode: "insensitive" } },
         });
 
         if (users.length !== usernames.length) {
@@ -31,7 +48,11 @@ const chatController = {
         userIds = users.map((u) => u.id);
       }
 
-      // Common include block
+      // Deduplicate userIds and include current user
+      const allUserIds = Array.from(
+        new Set([...(userIds || []), currentUserId])
+      );
+
       const includeFields = {
         users: {
           select: {
@@ -62,26 +83,21 @@ const chatController = {
       let chat;
 
       if (isGroup) {
-        // Create new group chat
         chat = await prisma.chat.create({
           data: {
             name,
-            logo,
+            logo: logoUrl,
             isGroup: true,
             adminId: currentUserId,
             lastModified: new Date(),
-            userIds: [currentUserId, ...(userIds || [])],
+            userIds: allUserIds,
             users: {
-              connect: [
-                { id: currentUserId },
-                ...(userIds || []).map((id) => ({ id })),
-              ],
+              connect: allUserIds.map((id) => ({ id })),
             },
           },
           include: includeFields,
         });
       } else {
-        // Check if 1-to-1 chat already exists
         const otherUserId = userIds?.[0];
         const existingChat = await prisma.chat.findFirst({
           where: {
@@ -93,11 +109,8 @@ const chatController = {
           include: includeFields,
         });
 
-        if (existingChat) {
-          return res.json(existingChat);
-        }
+        if (existingChat) return res.json(existingChat);
 
-        // Create new 1-to-1 chat
         chat = await prisma.chat.create({
           data: {
             isGroup: false,
@@ -116,6 +129,103 @@ const chatController = {
       next(err);
     }
   },
+
+  async updateGroupChat(req, res, next) {
+    try {
+      const { chatId } = req.params;
+      const { name, addUserIds = [], removeUserIds = [] } = req.body;
+      const currentUserId = req.user.id;
+
+      const existingChat = await prisma.chat.findUnique({
+        where: { id: chatId },
+        include: { users: true },
+      });
+
+      if (!existingChat)
+        return res.status(404).json({ error: "Chat not found" });
+      if (!existingChat.isGroup)
+        return res
+          .status(400)
+          .json({ error: "Only group chats can be updated" });
+      if (existingChat.adminId !== currentUserId)
+        return res
+          .status(403)
+          .json({ error: "Only the admin can update the group chat" });
+
+      let logoUrl = existingChat.logo;
+
+      if (req.file) {
+        const localPath = path.join(
+          __dirname,
+          "..",
+          "..",
+          "uploads",
+          req.file.filename
+        );
+        const uploadResult = await cloudinary.uploader.upload(localPath, {
+          folder: "grp_chat_logos",
+        });
+        logoUrl = uploadResult.secure_url;
+      }
+
+      const currentIds = existingChat.userIds;
+      const updatedIds = Array.from(
+        new Set([
+          ...currentIds.filter((id) => !removeUserIds.includes(id)),
+          ...addUserIds,
+          currentUserId,
+        ])
+      );
+
+      const updatedChat = await prisma.chat.update({
+        where: { id: chatId },
+        data: {
+          name: name || existingChat.name,
+          logo: logoUrl,
+          userIds: { set: updatedIds },
+          users: {
+            connect: updatedIds.map((id) => ({ id })),
+            disconnect: removeUserIds.map((id) => ({ id })),
+          },
+          lastModified: new Date(),
+        },
+        include: {
+          users: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              profilePic: true,
+              dob: true,
+            },
+          },
+          messages: {
+            orderBy: { timestamp: "desc" },
+            take: 1,
+            select: {
+              content: true,
+              type: true,
+              timestamp: true,
+              sender: {
+                select: {
+                  name: true,
+                  email: true,
+                  profilePic: true,
+                  dob: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      res.json(updatedChat);
+    } catch (err) {
+      console.error("Update group chat error:", err);
+      next(err);
+    }
+  },
+
   async getChats(req, res, next) {
     try {
       const userId = req.user.id;
@@ -271,7 +381,14 @@ const chatController = {
             has: userId,
           },
         },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          logo: true,
+          isGroup: true,
+          adminId: true, // ✅ include this
+          userIds: true,
+          lastModified: true,
           users: {
             select: {
               name: true,
@@ -667,75 +784,75 @@ const chatController = {
     }
   },
 
-  async updateGroupChat(req, res, next) {
-    try {
-      const { chatId } = req.params;
-      const { name, logo, newUserIds } = req.body;
-      const currentUserId = req.user.id;
+  // async updateGroupChat(req, res, next) {
+  //   try {
+  //     const { chatId } = req.params;
+  //     const { name, logo, newUserIds } = req.body;
+  //     const currentUserId = req.user.id;
 
-      const chat = await prisma.chat.findUnique({
-        where: { id: chatId },
-        include: {
-          users: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-      });
+  //     const chat = await prisma.chat.findUnique({
+  //       where: { id: chatId },
+  //       include: {
+  //         users: {
+  //           select: {
+  //             id: true,
+  //             name: true,
+  //             email: true,
+  //           },
+  //         },
+  //       },
+  //     });
 
-      if (!chat) {
-        return res.status(404).json({ error: "Group chat not found" });
-      }
+  //     if (!chat) {
+  //       return res.status(404).json({ error: "Group chat not found" });
+  //     }
 
-      if (chat.adminId !== currentUserId) {
-        return res
-          .status(403)
-          .json({ error: "Only the admin can update the group chat" });
-      }
+  //     if (chat.adminId !== currentUserId) {
+  //       return res
+  //         .status(403)
+  //         .json({ error: "Only the admin can update the group chat" });
+  //     }
 
-      const updateData = {
-        lastModified: new Date(),
-      };
+  //     const updateData = {
+  //       lastModified: new Date(),
+  //     };
 
-      if (name) updateData.name = name;
-      if (logo) updateData.logo = logo;
+  //     if (name) updateData.name = name;
+  //     if (logo) updateData.logo = logo;
 
-      if (newUserIds && newUserIds.length > 0) {
-        const existingUserIds = chat.users.map((user) => user.id);
-        const validNewUserIds = newUserIds.filter(
-          (id) => !existingUserIds.includes(id)
-        );
+  //     if (newUserIds && newUserIds.length > 0) {
+  //       const existingUserIds = chat.users.map((user) => user.id);
+  //       const validNewUserIds = newUserIds.filter(
+  //         (id) => !existingUserIds.includes(id)
+  //       );
 
-        updateData.userIds = {
-          set: [...existingUserIds, ...validNewUserIds],
-        };
+  //       updateData.userIds = {
+  //         set: [...existingUserIds, ...validNewUserIds],
+  //       };
 
-        updateData.users = {
-          connect: validNewUserIds.map((id) => ({ id })),
-        };
-      }
+  //       updateData.users = {
+  //         connect: validNewUserIds.map((id) => ({ id })),
+  //       };
+  //     }
 
-      const updatedChat = await prisma.chat.update({
-        where: { id: chatId },
-        data: updateData,
-        include: {
-          users: {
-            select: {
-              name: true,
-              email: true,
-            },
-          },
-        },
-      });
+  //     const updatedChat = await prisma.chat.update({
+  //       where: { id: chatId },
+  //       data: updateData,
+  //       include: {
+  //         users: {
+  //           select: {
+  //             name: true,
+  //             email: true,
+  //           },
+  //         },
+  //       },
+  //     });
 
-      res.json(updatedChat);
-    } catch (err) {
-      next(err);
-    }
-  },
+  //     res.json(updatedChat);
+  //   } catch (err) {
+  //     next(err);
+  //   }
+  // },
 
   //if sending invitelink via email
   // async  sendInviteLink(req, res, next) {
