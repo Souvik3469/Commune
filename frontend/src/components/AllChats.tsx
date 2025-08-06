@@ -3,7 +3,12 @@ import logo from "../assets/logo1.png";
 import ChatSection from "./ChatSection";
 import { FaPlus } from "react-icons/fa6";
 import { FC, useEffect, useMemo, useRef, useState } from "react";
-import { useAllChats, useCreateChat, useGroupChats } from "../hooks/chatHooks"; // <-- using dynamic hooks
+import {
+  useAllChats,
+  useCreateChat,
+  useGroupChats,
+  useUpdateChat,
+} from "../hooks/chatHooks"; // <-- using dynamic hooks
 import { useMyDetails, useUserSearch } from "../hooks/userHooks";
 import { ChatPreview } from "../types/chat";
 import { formatDistanceToNow } from "date-fns";
@@ -49,8 +54,12 @@ type TransformedChat = {
   fullChat: ChatPreview;
 };
 
+interface ExtendedChat extends Chat {
+  adminId?: string;
+}
+
 const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
-  const { data: user } = useMyDetails();
+  const { data: user, isLoading: UserLoading } = useMyDetails();
 
   const {
     data: oneToOneChats = [],
@@ -66,12 +75,18 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [groupName, setGroupName] = useState("");
+  const [groupLogo, setGroupLogo] = useState<File | null>(null);
+  const [previewLogo, setPreviewLogo] = useState<string | null>(null);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-
-  // ✅ updatedChats now stores content & timestamp
   const [updatedChats, setUpdatedChats] = useState<
     Record<string, { content: string; timestamp: string }>
   >({});
+  const [isEditingGroup, setIsEditingGroup] = useState(false);
+  const [chatToEdit, setChatToEdit] = useState<Chat | null>(null);
+  const [originalUserIds, setOriginalUserIds] = useState<string[]>([]);
+  const [showMembersDialog, setShowMembersDialog] = useState(false); // ✅
+  const [chatToViewMembers, setChatToViewMembers] =
+    useState<ChatPreview | null>(null); // ✅
 
   const ablyRef = useRef<Ably.Realtime | null>(null);
 
@@ -113,7 +128,31 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
   }, [oneToOneChats, groupChats]);
 
   const createChatMutation = useCreateChat();
-  const { data: searchResults = [] } = useUserSearch(searchQuery);
+  const { data: rawSearchResults = [] } = useUserSearch(searchQuery);
+  const searchResults = useMemo(
+    () => rawSearchResults.filter((u: UserPreview) => u.id !== user?.id),
+    [rawSearchResults, user?.id]
+  );
+
+  const handleEditGroupClick = (chat: ChatPreview) => {
+    if (!chat.isGroup || chat.adminId !== user?.id) return;
+
+    setGroupName(chat.name || "");
+    const ids = chat.users.map((u) => u.id);
+    setSelectedUsers(ids);
+    setOriginalUserIds(ids); // 👈 Store original user IDs separately
+    setGroupLogo(null);
+    setPreviewLogo(chat.logo || null);
+    setSearchQuery("");
+    setChatToEdit(chat);
+    setIsEditingGroup(true);
+  };
+
+  const handleViewMembersClick = (chat: ChatPreview) => {
+    console.log("MEMBER VIEW DIALOG TRIGGERED");
+    setChatToViewMembers(chat); // ✅
+    setShowMembersDialog(true); // ✅
+  };
 
   const handleCreateChat = async (userId: string) => {
     try {
@@ -142,16 +181,57 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
     try {
       const newGroup = await createChatMutation.mutateAsync({
         isGroup: true,
-        userIds: selectedUsers,
         name: groupName,
+        userIds: selectedUsers,
+        logo: groupLogo,
       });
+
       setGroupName("");
       setSelectedUsers([]);
       setIsCreatingGroup(false);
       setSearchQuery("");
+      setGroupLogo(null);
+      setPreviewLogo(null);
       setSelectedChat(newGroup);
     } catch (err) {
       console.error("Group creation failed", err);
+    }
+  };
+
+  const updateChatMutation = useUpdateChat();
+
+  const handleUpdateGroup = async () => {
+    if (!chatToEdit) return;
+
+    const prevUserIds = originalUserIds;
+    const newUserIds = selectedUsers;
+
+    const addUserIds = newUserIds.filter((id) => !prevUserIds.includes(id));
+    const removeUserIds = prevUserIds.filter((id) => !newUserIds.includes(id));
+
+    try {
+      const updatedGroup = await updateChatMutation.mutateAsync({
+        chatId: chatToEdit.id,
+        data: {
+          name: groupName,
+          logo: groupLogo,
+          addUserIds: addUserIds.length ? addUserIds : undefined,
+          removeUserIds: removeUserIds.length ? removeUserIds : undefined,
+        },
+      });
+
+      // ✅ Reset all group-edit state
+      setGroupName("");
+      setSelectedUsers([]);
+      setOriginalUserIds([]);
+      setIsEditingGroup(false);
+      setChatToEdit(null);
+      setSearchQuery("");
+      setGroupLogo(null);
+      setPreviewLogo(null);
+      setSelectedChat(updatedGroup);
+    } catch (err) {
+      console.error("Group update failed", err);
     }
   };
 
@@ -206,6 +286,7 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
           logo: chat.logo,
           userIds: chat.users.map((u) => u.id),
           users: chat.users,
+          adminId: (chat as ExtendedChat).adminId,
         },
       };
     });
@@ -223,7 +304,7 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
     [oneToOneChats, user?.id, updatedChats]
   );
 
-  console.log("TRANSFORM", transformedOneToOne);
+  if (UserLoading || !user) return null;
 
   return (
     <div
@@ -269,12 +350,49 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
           <FaPlus className="text-white text-xl" />
         </button>
       </div>
+      {showMembersDialog && chatToViewMembers && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-xl w-[90%] max-w-md shadow-xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Group Members
+              </h2>
+              <button
+                onClick={() => setShowMembersDialog(false)}
+                className="text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <ul className="space-y-2">
+              {chatToViewMembers.users.map((u) => (
+                <li key={u.id} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={u.profilePic || "/default-avatar.png"}
+                      alt={u.name}
+                      className="w-8 h-8 rounded-full"
+                    />
+                    <span className="text-gray-900 dark:text-white">
+                      {u.name}
+                    </span>
+                    {u.id === chatToViewMembers.adminId && (
+                      <span className="text-xs text-blue-500">(admin)</span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* Group Creation Mode */}
-      {isCreatingGroup ? (
+      {isCreatingGroup || isEditingGroup ? (
         <div className="flex-1 overflow-y-auto mt-2 px-2">
           <ChatSection
-            title="SELECT USERS"
+            title={isEditingGroup ? "EDIT GROUP MEMBERS" : "SELECT USERS"}
             isGroup={false}
             fullHeight
             chats={searchResults.map((user: UserPreview) => ({
@@ -289,7 +407,33 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
             selectable={true}
           />
 
-          <div className="mt-5">
+          <div className="mt-5 space-y-2">
+            <div className="flex items-center space-x-4">
+              {previewLogo ? (
+                <img
+                  src={previewLogo}
+                  className="h-10 w-10 rounded-full object-cover border border-gray-300"
+                  alt="Group Logo Preview"
+                />
+              ) : (
+                <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-600">
+                  Logo
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setGroupLogo(file);
+                    setPreviewLogo(URL.createObjectURL(file));
+                  }
+                }}
+                className="text-sm"
+              />
+            </div>
+
             <input
               type="text"
               value={groupName}
@@ -297,21 +441,28 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
               className="w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 text-sm dark:bg-black dark:text-white"
               placeholder="Enter group name"
             />
+
             <button
-              onClick={handleCreateGroup}
-              className="w-full mt-2 bg-blue-600 text-white py-2 rounded-md text-sm disabled:opacity-50"
+              onClick={isEditingGroup ? handleUpdateGroup : handleCreateGroup}
+              className="w-full bg-blue-600 text-white py-2 rounded-md text-sm disabled:opacity-50"
               disabled={selectedUsers.length === 0 || !groupName.trim()}
             >
-              Create Group
+              {isEditingGroup ? "Save Changes" : "Create Group"}
             </button>
+
             <button
               onClick={() => {
                 setIsCreatingGroup(false);
+                setIsEditingGroup(false);
                 setGroupName("");
                 setSelectedUsers([]);
+                setOriginalUserIds([]); // 👈 Clear on cancel
                 setSearchQuery("");
+                setGroupLogo(null);
+                setPreviewLogo(null);
+                setChatToEdit(null);
               }}
-              className="w-full mt-1 text-sm text-gray-600 dark:text-gray-400"
+              className="w-full text-sm text-gray-600 dark:text-gray-400"
             >
               Cancel
             </button>
@@ -349,11 +500,39 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
               title="GROUP CHATS"
               chats={transformedGroups}
               isGroup={true}
+              currentUserId={user?.id}
               onChatClick={(chatId) => {
                 const selected = transformedGroups.find((c) => c.id === chatId);
-                if (selected) setSelectedChat(selected.fullChat); // ✅ No type error now
+                if (selected) setSelectedChat(selected.fullChat);
               }}
+              onEditClick={(chat: ChatPreview) => handleEditGroupClick(chat)}
+              onViewMembersClick={handleViewMembersClick} // ✅ ✅ ✅ THIS WAS MISSING
+              // actionButtons={(chat: ChatPreview) => (
+              //   <div className="flex gap-2 items-center">
+              //     <button
+              //       className="text-sm text-blue-600 hover:underline"
+              //       onClick={(e) => {
+              //         e.stopPropagation(); // Prevent chat row click
+              //         handleViewMembersClick(chat);
+              //       }}
+              //     >
+              //       View Members
+              //     </button>
+              //     {chat.adminId === user?.id && (
+              //       <button
+              //         className="text-sm text-gray-500 hover:text-gray-900"
+              //         onClick={(e) => {
+              //           e.stopPropagation();
+              //           handleEditGroupClick(chat);
+              //         }}
+              //       >
+              //         ✎
+              //       </button>
+              //     )}
+              //   </div>
+              // )}
             />
+
             {loadingGroups && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <p className="text-sm text-gray-500">Loading group chats...</p>

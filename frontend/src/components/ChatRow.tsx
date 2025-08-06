@@ -7,6 +7,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import Ably from "ably";
 import type { Message as AblyMessage } from "ably";
 import { useMyDetails } from "../hooks/userHooks";
+import { ChatPreview } from "../types/chat";
 
 const TYPING_DELAY = 1000;
 
@@ -21,6 +22,10 @@ type ChatRowProps = {
   onClick?: () => void;
   selectable?: boolean;
   isGroup?: boolean;
+  onEditClick?: (chat: ChatPreview) => void; // ✅ Add this
+  currentUserId?: string; // ✅ Optional
+  fullChat?: ChatPreview; // ✅ add this
+  onViewMembersClick?: (chat: ChatPreview) => void;
 };
 
 const ChatRow: FC<ChatRowProps> = ({
@@ -33,6 +38,10 @@ const ChatRow: FC<ChatRowProps> = ({
   onClick,
   selectable = false,
   isGroup = false,
+  onEditClick,
+  currentUserId,
+  fullChat,
+  onViewMembersClick,
 }) => {
   const { data: user, isLoading: isUserLoading } = useMyDetails();
   const { mutate: deleteChat } = useDeleteChat();
@@ -222,8 +231,21 @@ const ChatRow: FC<ChatRowProps> = ({
       {showMenu && (
         <div
           ref={menuRef}
-          className="absolute right-4 top-10 bg-white dark:bg-[#121212] shadow-md border border-gray-200 dark:border-gray-700 rounded-md text-sm z-30 w-36"
+          className="absolute right-4 top-10 bg-white dark:bg-[#121212] shadow-md border border-gray-200 dark:border-gray-700 rounded-md text-sm  w-36"
+          style={{ zIndex: 9999 }}
         >
+          {isGroup && currentUserId === user?.id && onEditClick && fullChat && (
+            <button
+              onClick={() => {
+                onEditClick(fullChat);
+                setShowMenu(false);
+              }}
+              className="w-full flex items-center px-3 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-600 dark:text-blue-400"
+            >
+              ✏️ Edit Group
+            </button>
+          )}
+
           <button
             onClick={() => {
               setShowConfirm(true);
@@ -233,6 +255,21 @@ const ChatRow: FC<ChatRowProps> = ({
           >
             <Trash2 size={16} className="mr-2" />
             {isGroup ? "Leave Group" : "Delete Chat"}
+          </button>
+
+          <button
+            onClick={() => {
+              console.log("VIEW1");
+              if (fullChat) {
+                console.log("VIEW2");
+                onViewMembersClick?.(fullChat);
+              }
+              console.log("VIEW3");
+              setShowMenu(false);
+            }}
+            className="w-full flex items-center px-3 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-600 dark:text-blue-400"
+          >
+            👥 View Members
           </button>
         </div>
       )}

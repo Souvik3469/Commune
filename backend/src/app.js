@@ -1,10 +1,10 @@
 import express from "express";
 import http from "http";
-import { Server } from "socket.io";
+// import { Server } from "socket.io";
 import cors from "cors";
 import createError from "http-errors";
 import { authRoutes, chatRoute, userRoute } from "./v1/routes";
-import cloudinary from "cloudinary";
+// import cloudinary from "cloudinary";
 import session from "express-session";
 import passport from "passport";
 import rateLimit from "express-rate-limit";
@@ -118,11 +118,11 @@ const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
 app.use(limiter);
 
 // Cloudinary configuration
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// cloudinary.config({
+//   cloud_name: process.env.CLOUDINARY_NAME,
+//   api_key: process.env.CLOUDINARY_API_KEY,
+//   api_secret: process.env.CLOUDINARY_API_SECRET,
+// });
 
 // Express routes
 app.use("/v1/auth", authRoutes);

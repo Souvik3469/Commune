@@ -5,6 +5,9 @@ import { sendEmail } from "../../utils/sendEmail";
 const prisma = new PrismaClient();
 
 import bcrypt from "bcrypt";
+import fs from "fs";
+import path from "path";
+import cloudinary from "../../utils/cloudinary";
 
 const userController = {
   async myDetails(req, res, next) {
@@ -52,6 +55,57 @@ const userController = {
     } catch (err) {
       res.json(customResponse(400, err));
       console.log(err, "err");
+    }
+  },
+
+  async updateUser(req, res) {
+    try {
+      const { name, email, password } = req.body;
+      const userId = req.user.id;
+      let profilePic;
+      if (req.file) {
+        const localPath = path.join(
+          __dirname,
+          "..",
+          "..",
+          "uploads",
+          req.file.filename
+        );
+
+        const uploadResult = await cloudinary.uploader.upload(localPath, {
+          folder: "profile_pics",
+        });
+
+        profilePic = uploadResult.secure_url;
+        fs.unlinkSync(localPath);
+      }
+
+      const dataToUpdate = { name, email };
+      if (password) {
+        dataToUpdate.password = await bcrypt.hash(password, 10);
+      }
+      if (profilePic) {
+        dataToUpdate.profilePic = profilePic;
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          name: dataToUpdate.name,
+          email: dataToUpdate.email,
+          password: dataToUpdate.password,
+          profilePic: dataToUpdate.profilePic,
+        },
+      });
+
+      return res
+        .status(200)
+        .json({ message: "Profile updated successfully", data: updatedUser });
+    } catch (err) {
+      console.error(err);
+      return res
+        .status(500)
+        .json({ message: "Something went wrong", error: err.message });
     }
   },
 

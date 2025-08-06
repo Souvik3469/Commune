@@ -1,3 +1,4 @@
+import { ChatPreview } from "../types/chat";
 import ChatRow from "./ChatRow";
 import { FC } from "react";
 
@@ -9,6 +10,7 @@ type Chat = {
   seen: boolean;
   id: string;
   chatId: string;
+  fullChat: ChatPreview; // ✅ add this
 };
 
 type ChatSectionProps = {
@@ -18,6 +20,10 @@ type ChatSectionProps = {
   onChatClick?: (chatId: string) => void;
   fullHeight?: boolean;
   selectable?: boolean; // ← add this
+  onEditClick?: (chat: ChatPreview) => void;
+  currentUserId?: string;
+  actionButtons?: (chat: ChatPreview) => React.ReactNode;
+  onViewMembersClick?: (chat: ChatPreview) => void;
 };
 
 const ChatSection: FC<ChatSectionProps> = ({
@@ -27,6 +33,9 @@ const ChatSection: FC<ChatSectionProps> = ({
   onChatClick,
   fullHeight = false,
   selectable = false,
+  onEditClick,
+  currentUserId,
+  onViewMembersClick,
 }) => {
   return (
     <div
@@ -46,6 +55,14 @@ const ChatSection: FC<ChatSectionProps> = ({
           isGroup={isGroup}
           onClick={() => onChatClick?.(chat.id)}
           selectable={selectable}
+          onEditClick={onEditClick} // ✅ pass it here
+          currentUserId={currentUserId}
+          fullChat={chat.fullChat}
+          onViewMembersClick={
+            onViewMembersClick
+              ? () => onViewMembersClick(chat.fullChat)
+              : undefined
+          }
         />
       ))}
     </div>
