@@ -32,6 +32,12 @@ const chatController = {
         fs.unlinkSync(localPath); // remove file
       }
 
+      isGroup = isGroup === true || isGroup === "true";
+
+      if (userIds && !Array.isArray(userIds)) {
+        userIds = [userIds];
+      }
+
       if (isGroup && !name) {
         return res.status(400).json({ error: "Group chats must have a name." });
       }
@@ -48,7 +54,6 @@ const chatController = {
         userIds = users.map((u) => u.id);
       }
 
-      // Deduplicate userIds and include current user
       const allUserIds = Array.from(
         new Set([...(userIds || []), currentUserId])
       );
@@ -99,7 +104,8 @@ const chatController = {
         });
       } else {
         const otherUserId = userIds?.[0];
-        const existingChat = await prisma.chat.findFirst({
+
+        let existingChat = await prisma.chat.findFirst({
           where: {
             isGroup: false,
             userIds: {
@@ -109,7 +115,31 @@ const chatController = {
           include: includeFields,
         });
 
-        if (existingChat) return res.json(existingChat);
+        if (existingChat) {
+          // Check if current user had deleted the chat
+          const deletedChat = await prisma.deletedChat.findUnique({
+            where: {
+              userId_chatId: {
+                userId: currentUserId,
+                chatId: existingChat.id,
+              },
+            },
+          });
+
+          if (deletedChat) {
+            // Un-delete it by removing from deletedChat
+            await prisma.deletedChat.delete({
+              where: {
+                userId_chatId: {
+                  userId: currentUserId,
+                  chatId: existingChat.id,
+                },
+              },
+            });
+          }
+
+          return res.json(existingChat);
+        }
 
         chat = await prisma.chat.create({
           data: {
@@ -370,6 +400,7 @@ const chatController = {
       next(err);
     }
   },
+
   async getRooms(req, res, next) {
     try {
       const userId = req.user.id;

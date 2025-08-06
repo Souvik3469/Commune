@@ -18,15 +18,7 @@ import toast from "react-hot-toast";
 
 import ThemeToggleButton from "./ThemeToggleButton";
 import { useMyDetails } from "../hooks/userHooks";
-
-type MenuItem = {
-  id: string;
-  label: string;
-  activeIcon: FC<{ className: string }>;
-  inactiveIcon: FC<{ className: string }>;
-  showOnMobile: boolean;
-  showOnFull: boolean;
-};
+import { MenuItem } from "../types/generic";
 
 const menuItems: MenuItem[] = [
   {
@@ -148,13 +140,18 @@ const SideBar: FC<SideBarProps> = ({
           </button>
         )}
 
-        <div className="mx-2 my-14 sm:mx-6 sm:my-10">
+        <div className="mx-auto my-10 w-full max-w-[12rem] px-4 text-center">
           <img
             src={user?.profilePic}
             alt={user?.name || "Avatar"}
-            className="w-12 h-12 rounded-full"
+            className="w-12 h-12 rounded-full object-cover mx-auto"
           />
-          <div>{user?.name}</div>
+          <div
+            className="mt-2 text-base text-white truncate overflow-hidden"
+            title={user?.name}
+          >
+            {user?.name}
+          </div>
         </div>
 
         <div className="space-y-4 pt-6">{menuItems.map(renderMenuItem)}</div>
