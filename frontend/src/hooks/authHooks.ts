@@ -6,35 +6,19 @@ import {
   register,
   login,
   getCurrentUser,
-  logout, // Uncomment if you have a logout API
+  logout,
 } from "../api/auth";
 
-// Send OTP
-export const useSendOtp = () =>
-  useMutation({
-    mutationFn: (email: string) => sendOtp(email),
-  });
-
-// Verify OTP
-export const useVerifyOtp = () =>
-  useMutation({
-    mutationFn: ({ email, otp }: { email: string; otp: string }) =>
-      verifyOtp(email, otp),
-  });
-
-// Register
 export const useRegister = () =>
   useMutation({
     mutationFn: (formData: FormData) => register(formData),
   });
 
-// Login
 export const useLogin = () =>
   useMutation({
     mutationFn: (data: { email: string; password: string }) => login(data),
   });
 
-// Fetch current user
 export const useCurrentUser = () =>
   useQuery({
     queryKey: ["currentUser"],
@@ -46,8 +30,6 @@ export const useCurrentUser = () =>
     refetchOnWindowFocus: false,
   });
 
-// Logout (optional)
-
 export const useLogout = () => {
   const queryClient = useQueryClient();
 
@@ -58,3 +40,14 @@ export const useLogout = () => {
     },
   });
 };
+
+export const useSendOtp = () =>
+  useMutation({
+    mutationFn: (email: string) => sendOtp(email),
+  });
+
+export const useVerifyOtp = () =>
+  useMutation({
+    mutationFn: ({ email, otp }: { email: string; otp: string }) =>
+      verifyOtp(email, otp),
+  });

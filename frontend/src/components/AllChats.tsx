@@ -8,12 +8,18 @@ import {
   useCreateChat,
   useGroupChats,
   useUpdateChat,
-} from "../hooks/chatHooks"; // <-- using dynamic hooks
+} from "../hooks/chatHooks";
 import { useMyDetails, useUserSearch } from "../hooks/userHooks";
-import { ChatPreview } from "../types/chat";
+import {
+  Chat,
+  ChatPreview,
+  ExtendedChat,
+  TransformedChat,
+} from "../types/chat";
 import { formatDistanceToNow } from "date-fns";
 import Ably from "ably";
 import type { Message as AblyMessage } from "ably";
+import { UserPreview } from "../types/user";
 
 const MAX_MSG_LENGTH = 30;
 
@@ -21,42 +27,6 @@ type AllChatsProps = {
   className?: string;
   setSelectedChat: (chat: ChatPreview) => void;
 };
-
-export type UserPreview = {
-  id: string;
-  name: string;
-  email: string;
-  profilePic: string;
-};
-
-interface Message {
-  content: string;
-  timestamp: string;
-  senderId: string;
-}
-
-interface Chat {
-  id: string;
-  name?: string;
-  logo?: string;
-  users: UserPreview[];
-  messages?: Message[];
-}
-
-type TransformedChat = {
-  id: string;
-  chatId: string;
-  name: string;
-  message: string;
-  time: string;
-  avatarSrc: string;
-  seen: boolean;
-  fullChat: ChatPreview;
-};
-
-interface ExtendedChat extends Chat {
-  adminId?: string;
-}
 
 const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
   const { data: user, isLoading: UserLoading } = useMyDetails();

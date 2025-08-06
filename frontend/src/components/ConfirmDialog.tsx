@@ -1,4 +1,3 @@
-// components/ConfirmDialog.tsx
 import { FC } from "react";
 import { Dialog } from "@headlessui/react";
 import { X } from "lucide-react";

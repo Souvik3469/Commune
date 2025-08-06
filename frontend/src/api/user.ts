@@ -3,7 +3,8 @@ import api from "./axiosInstance";
 export const myDetails = () =>
   api.get("/user/my-details").then((res) => {
     const user = res.data.message;
-    const defaultProfilePic = `https://i.pravatar.cc/150?u=58`;
+    const defaultProfilePic =
+      "https://static.vecteezy.com/system/resources/thumbnails/009/292/244/small_2x/default-avatar-icon-of-social-media-user-vector.jpg";
     return {
       ...user,
       profilePic: user.profilePic || defaultProfilePic,
@@ -12,7 +13,7 @@ export const myDetails = () =>
 
 export const searchUsers = async (query: string) => {
   const res = await api.get(`/user/search?query=${encodeURIComponent(query)}`);
-  return res.data; // List of users
+  return res.data;
 };
 
 export const updateProfile = async (formData: FormData) => {

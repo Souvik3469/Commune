@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { myDetails, searchUsers, updateProfile } from "../api/user";
 
 export const useMyDetails = () =>
@@ -20,7 +20,13 @@ export const useUserSearch = (query: string) => {
   });
 };
 
-export const useUpdateProfile = () =>
-  useMutation({
+export const useUpdateProfile = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
     mutationFn: (formData: FormData) => updateProfile(formData),
+    onSuccess: () => {
+      queryClient.refetchQueries({ queryKey: ["myDetails"] }); // ✅ Force refetch
+    },
   });
+};

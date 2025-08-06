@@ -2,23 +2,14 @@ import { FC, useEffect, useRef, useState } from "react";
 import Ably from "ably";
 import type { Message as AblyMessage } from "ably";
 import { useMyDetails } from "../hooks/userHooks";
-import { useChatById, useMessages } from "../hooks/chatHooks";
+import { useChatById } from "../hooks/chatHooks";
 import { useQueryClient, InfiniteData } from "@tanstack/react-query";
+import { MessageDetail } from "../types/message";
+import { useMessages } from "../hooks/messageHooks";
+import TypingIndicator from "./TypingIndicator";
 
 const MSG_GROUP_TIME = 2 * 60 * 1000;
 const TYPING_DELAY = 1000;
-
-export interface Message {
-  id: string;
-  content: string;
-  timestamp: string;
-  senderId: string;
-  chatId: string;
-  sender: {
-    name: string;
-    profilePic: string | null;
-  };
-}
 
 type ChatAreaProps = {
   chatId: string;
@@ -43,6 +34,25 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
   const isGroupChat = chatData?.isGroup;
 
   const messages = data?.pages.flatMap((page) => page.messages).reverse() || [];
+
+  function formatDateHeader(dateString: string): string {
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    const isToday = date.toDateString() === today.toDateString();
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+
+    if (isToday) return "Today";
+    if (isYesterday) return "Yesterday";
+
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }); // e.g. 06 Aug 2025
+  }
 
   useEffect(() => {
     if (messages.length > 0 && !isFetchingNextPage) {
@@ -88,10 +98,10 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
     const channel = ably.channels.get(`chat-${chatId}`);
 
     const onNewMessage = (msg: AblyMessage) => {
-      const newMessage = msg.data as Message;
+      const newMessage = msg.data as MessageDetail;
 
       queryClient.setQueryData<
-        InfiniteData<{ messages: Message[]; nextCursor: string | null }>
+        InfiniteData<{ messages: MessageDetail[]; nextCursor: string | null }>
       >(["messages", chatId], (oldData) => {
         if (!oldData) return oldData;
 
@@ -218,6 +228,7 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
       {messages.map((msg, index) => {
         const isOwn = msg.senderId === user.id;
         const prevMsg = messages[index - 1];
+
         const showHeader =
           !prevMsg ||
           prevMsg.senderId !== msg.senderId ||
@@ -225,67 +236,83 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
             new Date(prevMsg.timestamp).getTime() >
             MSG_GROUP_TIME;
 
-        return (
-          <div
-            key={msg.id}
-            className={`flex items-center mx-2 my-1 ${
-              isOwn ? "self-end flex-row-reverse" : "self-start flex-row"
-            }`}
-          >
-            <div>
-              <img
-                src={msg?.sender?.profilePic || "https://i.pravatar.cc/150"}
-                alt={`${msg?.sender?.name} avatar`}
-                className={`h-8 w-8 rounded-full mx-2 ${
-                  showHeader ? "" : "invisible"
-                }`}
-              />
-            </div>
-            <div>
-              {showHeader && (
-                <div
-                  className={`flex items-center ${
-                    isOwn ? "flex-row-reverse" : "flex-row"
-                  }`}
-                >
-                  <div className="text-xs sm:text-sm text-gray-800 dark:text-gray-300 mx-2">
-                    {isOwn ? "You" : msg?.sender?.name}
-                  </div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500 mx-3">
-                    {new Date(msg.timestamp).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </div>
-                </div>
-              )}
+        // Date divider logic
+        const prevDate = prevMsg
+          ? new Date(prevMsg.timestamp).toDateString()
+          : null;
+        const currDate = new Date(msg.timestamp).toDateString();
+        const showDateHeading = prevDate !== currDate;
 
-              <div
-                className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
-              >
-                <div>
+        return (
+          <div key={msg.id}>
+            {showDateHeading && (
+              <div className="flex justify-center my-3">
+                <div className="bg-gray-300 dark:bg-gray-700 text-xs text-gray-800 dark:text-gray-200 py-1 px-3 rounded-full">
+                  {formatDateHeader(msg.timestamp)}
+                </div>
+              </div>
+            )}
+
+            <div
+              className={`flex items-center mx-2 my-1 ${
+                isOwn ? "self-end flex-row-reverse" : "self-start flex-row"
+              }`}
+            >
+              <div>
+                <img
+                  src={msg?.sender?.profilePic || "https://i.pravatar.cc/150"}
+                  alt={`${msg?.sender?.name} avatar`}
+                  className={`h-8 w-8 rounded-full mx-2 ${
+                    showHeader ? "" : "invisible"
+                  }`}
+                />
+              </div>
+              <div>
+                {showHeader && (
                   <div
-                    className={`rounded-lg text-sm sm:text-base ${
-                      showHeader ? "my-[3px]" : "my-[0px]"
-                    } p-2 self-end inline-block max-w-60 sm:max-w-80 ${
-                      isOwn
-                        ? "bg-[#00A3FF] text-white"
-                        : "bg-white dark:bg-[#292929] text-black dark:text-white"
+                    className={`flex items-center ${
+                      isOwn ? "flex-row-reverse" : "flex-row"
                     }`}
                   >
-                    {msg.content}
+                    <div className="text-xs sm:text-sm text-gray-800 dark:text-gray-300 mx-2">
+                      {isOwn ? "You" : msg?.sender?.name}
+                    </div>
+                    <div className="text-xs text-gray-400 dark:text-gray-500 mx-3">
+                      {new Date(msg.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
                   </div>
-                  {showHeader && (
+                )}
+
+                <div
+                  className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
+                >
+                  <div>
                     <div
-                      className={`flex ${
-                        isOwn ? "justify-end" : "justify-start"
+                      className={`rounded-lg text-sm sm:text-base ${
+                        showHeader ? "my-[3px]" : "my-[0px]"
+                      } p-2 self-end inline-block max-w-60 sm:max-w-80 ${
+                        isOwn
+                          ? "bg-[#00A3FF] text-white"
+                          : "bg-white dark:bg-[#292929] text-black dark:text-white"
                       }`}
                     >
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mx-1">
-                        Seen
-                      </div>
+                      {msg.content}
                     </div>
-                  )}
+                    {showHeader && (
+                      <div
+                        className={`flex ${
+                          isOwn ? "justify-end" : "justify-start"
+                        }`}
+                      >
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mx-1">
+                          Seen
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -294,12 +321,12 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
       })}
 
       {typingUsers.size > 0 && (
-        <div className="text-sm text-gray-500 dark:text-gray-400 px-4 py-2">
-          {isGroupChat
-            ? `${Array.from(typingUsers).join(", ")} ${
-                typingUsers.size === 1 ? "is" : "are"
-              } typing...`
-            : "Typing..."}
+        <div className="px-4 py-2">
+          <TypingIndicator
+            users={Array.from(typingUsers)} // now returns TypingUser[]
+            isGroupChat={isGroupChat}
+            size="md"
+          />
         </div>
       )}
 

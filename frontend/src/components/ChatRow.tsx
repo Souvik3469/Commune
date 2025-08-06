@@ -8,6 +8,7 @@ import Ably from "ably";
 import type { Message as AblyMessage } from "ably";
 import { useMyDetails } from "../hooks/userHooks";
 import { ChatPreview } from "../types/chat";
+import TypingIndicator from "./TypingIndicator";
 
 const TYPING_DELAY = 1000;
 
@@ -74,6 +75,7 @@ const ChatRow: FC<ChatRowProps> = ({
     const channel = ablyRef.current.channels.get(`chat-${chatId}`);
 
     const handleTyping = (msg: AblyMessage) => {
+      console.log(msg);
       const { userId: senderId, userName } = msg.data || {};
       if (senderId === user?.id || !userName) return;
 
@@ -126,19 +128,14 @@ const ChatRow: FC<ChatRowProps> = ({
     return <p>Loading user...</p>;
   }
 
-  const typingDisplay = isGroup
-    ? typingUsers.length > 0 && (
-        <span
-          className="italic text-blue-600 truncate block"
-          title={`${typingUsers.join(", ")} ${
-            typingUsers.length === 1 ? "is" : "are"
-          } typing...`}
-        >
-          {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"}{" "}
-          typing...
-        </span>
-      )
-    : isTyping && <span className="italic text-blue-600">Typing...</span>;
+  const typingDisplay =
+    (isGroup && typingUsers.length > 0) || (!isGroup && isTyping) ? (
+      <TypingIndicator
+        users={isGroup ? typingUsers : []}
+        isGroupChat={isGroup}
+        size="sm"
+      />
+    ) : null;
 
   return (
     <div className="relative group">

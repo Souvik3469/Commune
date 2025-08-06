@@ -2,7 +2,6 @@ import { FC, useRef } from "react";
 import ChatBar from "./ChatBar";
 import ChatArea from "./ChatArea";
 import MessageBox from "./MessageBox";
-// import { useMessages } from "../hooks/chatHooks";
 import { ChatPreview } from "../types/chat";
 
 type ChatBoxProps = {
