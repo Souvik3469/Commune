@@ -32,7 +32,6 @@ export const useCurrentUser = () =>
 
 export const useLogout = () => {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: logout,
     onSuccess: () => {

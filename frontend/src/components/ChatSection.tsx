@@ -8,7 +8,7 @@ type ChatSectionProps = {
   isGroup: boolean;
   onChatClick?: (chatId: string) => void;
   fullHeight?: boolean;
-  selectable?: boolean; // ← add this
+  selectable?: boolean;
   onEditClick?: (chat: ChatPreview) => void;
   currentUserId?: string;
   actionButtons?: (chat: ChatPreview) => React.ReactNode;

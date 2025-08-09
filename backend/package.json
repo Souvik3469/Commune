@@ -8,7 +8,8 @@
     "dev": "nodemon --exec babel-node src/app.js",
     "build": "babel src -s -d build --copy-files",
     "lint": "eslint src/**/*.js",
-    "lint-fix": "eslint src/**/*.js --fix"
+    "lint-fix": "eslint src/**/*.js --fix",
+    "sandbox:backup": "node src/v1/backup/backupSandboxUsers.js"
   },
   "keywords": [],
   "license": "MIT",

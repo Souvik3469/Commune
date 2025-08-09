@@ -12,7 +12,6 @@ export const getAllMessages = async (chatId: string, cursor?: string) => {
   const res = await api.get(`/chat/${chatId}/messages`, {
     params: { cursor },
   });
-
   return {
     messages: res.data.messages,
     nextCursor: res.data.nextCursor,

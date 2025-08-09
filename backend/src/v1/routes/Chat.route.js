@@ -1,30 +1,25 @@
 import express from "express";
 import authMiddleware from "../middlewares/Auth.middleware";
-import chatController from "../controllers/chat/chat";
+import { chatController } from "../controllers";
 import upload from "../middlewares/upload";
 
 const router = express.Router();
 
-// 📁 Chat creation & fetching
 router.post(
   "/create",
   authMiddleware,
   upload.single("logo"),
   chatController.createChat
 );
-
 router.put(
   "/update/:chatId",
   authMiddleware,
   upload.single("logo"),
   chatController.updateGroupChat
 );
-
-router.get("/get-chats", authMiddleware, chatController.getChats); // one-to-one
-router.get("/get-rooms", authMiddleware, chatController.getRooms); // group chats
-router.delete("/:chatId", authMiddleware, chatController.deleteChat); // delete chat
-
-// 📁 Messages
+router.get("/get-chats", authMiddleware, chatController.getChats);
+router.get("/get-rooms", authMiddleware, chatController.getRooms);
+router.delete("/:chatId", authMiddleware, chatController.deleteChat);
 router.post("/send", authMiddleware, chatController.createMessage);
 router.get(
   "/:chatId/messages",
@@ -37,8 +32,6 @@ router.put(
   authMiddleware,
   chatController.updateMessageStatus
 );
-
-// 📁 Group chat management
 router.patch(
   "/:chatId/update",
   authMiddleware,
@@ -50,8 +43,6 @@ router.patch(
   authMiddleware,
   chatController.removeGroupMembers
 );
-
-// 📁 Group invite links
 router.post(
   "/:chatId/invite-link",
   authMiddleware,
@@ -62,7 +53,6 @@ router.post(
   authMiddleware,
   chatController.acceptInviteLink
 );
-
 router.get("/:chatId", authMiddleware, chatController.getChatById);
 
 export default router;

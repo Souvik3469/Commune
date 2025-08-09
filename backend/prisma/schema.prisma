@@ -16,6 +16,7 @@ model User {
     email               String              @unique
     username            String?
     password            String
+    gender              String?
     googleId            String?
     dob                 DateTime?
     active              Boolean             @default(false)

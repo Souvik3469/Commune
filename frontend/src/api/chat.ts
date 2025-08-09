@@ -9,26 +9,21 @@ export const createChat = async (data: {
 }) => {
   const formData = new FormData();
   formData.append("isGroup", data.isGroup.toString());
-
   if (data.name) formData.append("name", data.name);
   if (data.logo) formData.append("logo", data.logo);
-
   if (data.userIds && data.userIds.length > 0) {
     data.userIds.forEach((id) => formData.append("userIds", id));
   }
-
   if (data.usernames && data.usernames.length > 0) {
     data.usernames.forEach((username) =>
       formData.append("usernames", username)
     );
   }
-
   const res = await api.post("/chat/create", formData, {
     headers: {
       "Content-Type": "multipart/form-data",
     },
   });
-
   return res.data;
 };
 
@@ -57,17 +52,13 @@ export const updateChat = async (
   }
 ) => {
   const formData = new FormData();
-
   if (data.name) formData.append("name", data.name);
   if (data.logo) formData.append("logo", data.logo);
-
   data.addUserIds?.forEach((id) => formData.append("addUserIds[]", id));
   data.removeUserIds?.forEach((id) => formData.append("removeUserIds[]", id));
-
   const res = await api.patch(`/chat/${chatId}/update`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
-
   return res.data;
 };
 

@@ -12,20 +12,16 @@ export function sendOTPEmail(otp, recipientEmail, recipientName) {
       "content-type": "application/JSON",
     },
   };
-
   const req = http.request(options, function (res) {
     const chunks = [];
-
     res.on("data", function (chunk) {
       chunks.push(chunk);
     });
-
     res.on("end", function () {
       const body = Buffer.concat(chunks);
-      console.log(body.toString());
+      // console.log(body.toString());
     });
   });
-
   const emailData = {
     recipients: [
       {
@@ -42,14 +38,12 @@ export function sendOTPEmail(otp, recipientEmail, recipientName) {
       },
     ],
     from: {
-      name: "Duocortex",
-      email: "mail@mail.duocortex.app",
+      name: "Commune",
+      email: "mail@mail.commune.app",
     },
-    domain: "mail.duocortex.app",
+    domain: "mail.commune.app",
     template_id: "global_otp",
   };
-
-  // Sending the request
   req.write(JSON.stringify(emailData));
   req.end();
 }

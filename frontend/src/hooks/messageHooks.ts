@@ -16,7 +16,6 @@ export const useMessages = (chatId: string | undefined) =>
 
 export const useSendMessage = (onSuccessCallback?: () => void) => {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: sendMessage,
     onSuccess: (_, { chatId }) => {

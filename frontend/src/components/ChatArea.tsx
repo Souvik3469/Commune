@@ -195,6 +195,12 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
     isInitialLoadRef.current = true;
   }, [chatId]);
 
+  useEffect(() => {
+    if (typingUsers.size > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [typingUsers, bottomRef]);
+
   if (isUserLoading) {
     return <p>Loading user...</p>;
   }
@@ -323,7 +329,7 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
       {typingUsers.size > 0 && (
         <div className="px-4 py-2">
           <TypingIndicator
-            users={Array.from(typingUsers)} // now returns TypingUser[]
+            users={Array.from(typingUsers)}
             isGroupChat={isGroupChat}
             size="md"
           />

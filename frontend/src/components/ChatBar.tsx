@@ -15,7 +15,6 @@ const ChatBar = ({ chat }: { chat: ChatPreview }) => {
     );
   }
 
-  // Determine display name and avatar
   const isGroup = chat.isGroup;
   const displayName = isGroup
     ? chat.name
@@ -26,9 +25,6 @@ const ChatBar = ({ chat }: { chat: ChatPreview }) => {
   if (isUserLoading) {
     return <p>Loading user...</p>;
   }
-
-  console.log("USER", user);
-  console.log("USERS", chat.users);
 
   return (
     <div className="grid grid-cols-12 p-2 bg-white dark:bg-black border-b-[1px] border-gray-300 dark:border-gray-700 sticky top-0 z-10">

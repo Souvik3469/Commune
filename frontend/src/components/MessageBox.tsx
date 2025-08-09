@@ -49,7 +49,6 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
 
   const handleSend = () => {
     if (!content.trim()) return;
-
     sendMessage(
       { chatId, content },
       {
@@ -61,7 +60,6 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
             senderName: user?.name,
             createdAt: new Date().toISOString(),
           });
-
           setContent("");
           setShowEmojiPicker(false);
           setTimeout(() => scrollToBottom(), 100);
@@ -80,7 +78,6 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
         userId: user.id,
         userName: user.name,
       });
-
       refreshTypingInterval.current = setInterval(() => {
         channelRef.current?.publish("typing", {
           typing: true,
@@ -89,9 +86,7 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
         });
       }, TYPING_REFRESH_INTERVAL);
     }
-
     if (typingTimeout.current) clearTimeout(typingTimeout.current);
-
     typingTimeout.current = setTimeout(() => {
       isTyping.current = false;
       channelRef.current?.publish("typing", {
