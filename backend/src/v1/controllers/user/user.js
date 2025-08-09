@@ -15,21 +15,16 @@ const userController = {
       const user = await prisma.user.findFirst({
         where: { id: req.user.id },
       });
-
       if (!user) {
         return res.status(404).json(customResponse(404, "User not found"));
       }
-
-      const defaultProfilePic = "https://i.pravatar.cc/150?u=27";
-      const userWithDefaultPhoto = {
-        ...user,
-        profilePic: user.profilePic || defaultProfilePic,
-      };
-
-      res.json(customResponse(200, userWithDefaultPhoto));
+      res.json(customResponse(200, user));
     } catch (err) {
-      console.log(err, "err");
-      res.status(500).json(customResponse(500, "Something went wrong"));
+      console.error("Something went wrong during fetching your details: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during fetching your details. Please try again later.",
+      });
     }
   },
 
@@ -37,7 +32,6 @@ const userController = {
     try {
       const { userId } = req.query;
       let user;
-
       user = await prisma.user.findUnique({
         where: {
           id: userId,
@@ -50,11 +44,13 @@ const userController = {
           bio: true,
         },
       });
-
       res.json(customResponse(200, user));
     } catch (err) {
-      res.json(customResponse(400, err));
-      console.log(err, "err");
+      console.error("Something went wrong during fetching user details: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during fetching user details. Please try again later.",
+      });
     }
   },
 
@@ -71,15 +67,12 @@ const userController = {
           "uploads",
           req.file.filename
         );
-
         const uploadResult = await cloudinary.uploader.upload(localPath, {
           folder: "profile_pics",
         });
-
         profilePic = uploadResult.secure_url;
         fs.unlinkSync(localPath);
       }
-
       const dataToUpdate = { name, email };
       if (password) {
         dataToUpdate.password = await bcrypt.hash(password, 10);
@@ -87,7 +80,6 @@ const userController = {
       if (profilePic) {
         dataToUpdate.profilePic = profilePic;
       }
-
       const updatedUser = await prisma.user.update({
         where: { id: userId },
         data: {
@@ -95,28 +87,27 @@ const userController = {
           email: dataToUpdate.email,
           password: dataToUpdate.password,
           profilePic: dataToUpdate.profilePic,
+          gender: dataToUpdate.gender,
         },
       });
-
       return res
         .status(200)
         .json({ message: "Profile updated successfully", data: updatedUser });
     } catch (err) {
-      console.error(err);
-      return res
-        .status(500)
-        .json({ message: "Something went wrong", error: err.message });
+      console.error("Something went wrong during updating your profile: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during updating your profile. Please try again later.",
+      });
     }
   },
 
   async searchUsers(req, res, next) {
     try {
       const { query } = req.query;
-
       if (!query) {
         return res.status(400).json({ error: "Search query is required" });
       }
-
       const users = await prisma.user.findMany({
         where: {
           name: {
@@ -135,39 +126,35 @@ const userController = {
           name: "asc",
         },
       });
-
       res.json(users);
     } catch (err) {
-      next(err);
+      console.error("Something went wrong during searching users: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during searching users. Please try again later.",
+      });
     }
   },
 
   async forgotPassword(req, res, next) {
     try {
       const { email } = req.body;
-
       if (!email) {
         return res.status(400).json({ message: "Email is required" });
       }
-
       const user = await prisma.user.findUnique({
         where: { email },
       });
-
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-
       // const resetToken = crypto.randomBytes(32).toString("hex");
-
       // const resetTokenHash = crypto
       //   .createHash("sha256")
       //   .update(resetToken)
       //   .digest("hex");
-
       const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
       const resetPasswordExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
-
       await prisma.user.update({
         where: { email },
         data: {
@@ -175,9 +162,7 @@ const userController = {
           resetPasswordExpiry,
         },
       });
-
       // const resetURL = `${process.env.DEV_URL2}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
-
       // Send the email
       await sendEmail(
         email,
@@ -190,24 +175,22 @@ const userController = {
         // `
         `Your password reset code is ${resetCode}. The code will expire in 15 minutes`
       );
-
       return res.status(200).json({ message: "Password reset email sent" });
     } catch (err) {
-      console.error("Forgot Password Error:", err);
-      return res
-        .status(500)
-        .json({ message: "Internal Server Error", error: err.message });
+      console.error("Something went wrong during forgot password: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during forgot password. Please try again later.",
+      });
     }
   },
 
   async verifyResetCode(req, res) {
     try {
       const { email, resetCode } = req.body;
-
       const user = await prisma.user.findUnique({
         where: { email },
       });
-
       if (
         !user ||
         user.resetPasswordToken !== resetCode ||
@@ -217,23 +200,22 @@ const userController = {
           .status(400)
           .json({ message: "Invalid or expired reset code" });
       }
-
       res.status(200).json({ message: "Code verified successfully" });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Internal server error" });
+    } catch (err) {
+      console.error("Something went wrong during verifying code: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during verifying code. Please try again later.",
+      });
     }
   },
 
   async resetPassword(req, res) {
     try {
       const { email, newPassword } = req.body;
-      // console.log("Pass",newPassword)
-
       const user = await prisma.user.findUnique({
         where: { email },
       });
-
       if (
         !user ||
         !user.resetPasswordToken ||
@@ -243,9 +225,7 @@ const userController = {
           .status(400)
           .json({ message: "Invalid or expired reset code" });
       }
-
       const hashedPassword = await bcrypt.hash(newPassword, 10);
-
       await prisma.user.update({
         where: { email },
         data: {
@@ -254,11 +234,13 @@ const userController = {
           resetPasswordExpiry: null,
         },
       });
-
       res.status(200).json({ message: "Password reset successful" });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Internal server error" });
+    } catch (err) {
+      console.error("Something went wrong during resetting password: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during resetting password. Please try again later.",
+      });
     }
   },
 };

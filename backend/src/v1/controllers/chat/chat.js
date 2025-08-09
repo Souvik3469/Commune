@@ -13,10 +13,8 @@ const chatController = {
     try {
       let { userIds, isGroup, name, usernames } = req.body;
       const currentUserId = req.user.id;
-
       const defaultGroupLogo = "https://www.tenniscall.com/images/chat.jpg";
       let logoUrl = defaultGroupLogo;
-
       if (req.file) {
         const localPath = path.join(
           __dirname,
@@ -29,35 +27,27 @@ const chatController = {
           folder: "grp_chat_logos",
         });
         logoUrl = uploadResult.secure_url;
-        fs.unlinkSync(localPath); // remove file
+        fs.unlinkSync(localPath);
       }
-
       isGroup = isGroup === true || isGroup === "true";
-
       if (userIds && !Array.isArray(userIds)) {
         userIds = [userIds];
       }
-
       if (isGroup && !name) {
         return res.status(400).json({ error: "Group chats must have a name." });
       }
-
       if (usernames) {
         const users = await prisma.user.findMany({
           where: { username: { in: usernames, mode: "insensitive" } },
         });
-
         if (users.length !== usernames.length) {
           return res.status(400).json({ error: "One or more users not found" });
         }
-
         userIds = users.map((u) => u.id);
       }
-
       const allUserIds = Array.from(
         new Set([...(userIds || []), currentUserId])
       );
-
       const includeFields = {
         users: {
           select: {
@@ -84,9 +74,7 @@ const chatController = {
           },
         },
       };
-
       let chat;
-
       if (isGroup) {
         chat = await prisma.chat.create({
           data: {
@@ -104,7 +92,6 @@ const chatController = {
         });
       } else {
         const otherUserId = userIds?.[0];
-
         let existingChat = await prisma.chat.findFirst({
           where: {
             isGroup: false,
@@ -114,9 +101,7 @@ const chatController = {
           },
           include: includeFields,
         });
-
         if (existingChat) {
-          // Check if current user had deleted the chat
           const deletedChat = await prisma.deletedChat.findUnique({
             where: {
               userId_chatId: {
@@ -125,9 +110,7 @@ const chatController = {
               },
             },
           });
-
           if (deletedChat) {
-            // Un-delete it by removing from deletedChat
             await prisma.deletedChat.delete({
               where: {
                 userId_chatId: {
@@ -137,10 +120,8 @@ const chatController = {
               },
             });
           }
-
           return res.json(existingChat);
         }
-
         chat = await prisma.chat.create({
           data: {
             isGroup: false,
@@ -153,10 +134,13 @@ const chatController = {
           include: includeFields,
         });
       }
-
       res.json(chat);
     } catch (err) {
-      next(err);
+      console.error("Something went wrong during chat creation: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during chat creation. Please try again later.",
+      });
     }
   },
 
@@ -165,12 +149,10 @@ const chatController = {
       const { chatId } = req.params;
       const { name, addUserIds = [], removeUserIds = [] } = req.body;
       const currentUserId = req.user.id;
-
       const existingChat = await prisma.chat.findUnique({
         where: { id: chatId },
         include: { users: true },
       });
-
       if (!existingChat)
         return res.status(404).json({ error: "Chat not found" });
       if (!existingChat.isGroup)
@@ -181,9 +163,7 @@ const chatController = {
         return res
           .status(403)
           .json({ error: "Only the admin can update the group chat" });
-
       let logoUrl = existingChat.logo;
-
       if (req.file) {
         const localPath = path.join(
           __dirname,
@@ -197,7 +177,6 @@ const chatController = {
         });
         logoUrl = uploadResult.secure_url;
       }
-
       const currentIds = existingChat.userIds;
       const updatedIds = Array.from(
         new Set([
@@ -206,7 +185,6 @@ const chatController = {
           currentUserId,
         ])
       );
-
       const updatedChat = await prisma.chat.update({
         where: { id: chatId },
         data: {
@@ -248,18 +226,19 @@ const chatController = {
           },
         },
       });
-
       res.json(updatedChat);
     } catch (err) {
-      console.error("Update group chat error:", err);
-      next(err);
+      console.error("Something went wrong during updating group chat: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during updating group chat. Please try again later.",
+      });
     }
   },
 
   async getChats(req, res, next) {
     try {
       const userId = req.user.id;
-
       const chats = await prisma.chat.findMany({
         where: {
           isGroup: false,
@@ -287,7 +266,6 @@ const chatController = {
           lastModified: "desc",
         },
       });
-
       const filteredChats = await Promise.all(
         chats.map(async (chat) => {
           const deletedChat = await prisma.deletedChat.findUnique({
@@ -298,7 +276,6 @@ const chatController = {
               },
             },
           });
-
           if (deletedChat) {
             const latestMessage = await prisma.message.findFirst({
               where: {
@@ -311,22 +288,21 @@ const chatController = {
                 timestamp: "desc",
               },
             });
-
             if (!latestMessage) {
               return null;
             }
           }
-
           return chat;
         })
       );
-
       const visibleChats = filteredChats.filter(Boolean);
-
       res.json(visibleChats);
     } catch (err) {
-      console.log(err);
-      next(err);
+      console.error("Something went wrong during fetching all chats: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during fetching all chats. Please try again later.",
+      });
     }
   },
 
@@ -334,8 +310,6 @@ const chatController = {
     try {
       const userId = req.user.id;
       const { chatId } = req.params;
-
-      // Step 1: Find the chat
       const chat = await prisma.chat.findUnique({
         where: {
           id: chatId,
@@ -360,12 +334,9 @@ const chatController = {
           },
         },
       });
-
       if (!chat) {
         return res.status(404).json({ message: "Chat not found" });
       }
-
-      // Step 2: Check if user deleted the chat
       const deletedChat = await prisma.deletedChat.findUnique({
         where: {
           userId_chatId: {
@@ -374,7 +345,6 @@ const chatController = {
           },
         },
       });
-
       if (deletedChat) {
         const latestMessage = await prisma.message.findFirst({
           where: {
@@ -387,24 +357,23 @@ const chatController = {
             timestamp: "desc",
           },
         });
-
-        // If no message after deletion, return 204 No Content
         if (!latestMessage) {
           return res.status(204).json(null);
         }
       }
-
       res.json(chat);
     } catch (err) {
-      console.error(err);
-      next(err);
+      console.error("Something went wrong during fetching the chat: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during fetching the chat. Please try again later.",
+      });
     }
   },
 
   async getRooms(req, res, next) {
     try {
       const userId = req.user.id;
-
       const chats = await prisma.chat.findMany({
         where: {
           isGroup: true,
@@ -417,7 +386,7 @@ const chatController = {
           name: true,
           logo: true,
           isGroup: true,
-          adminId: true, // ✅ include this
+          adminId: true,
           userIds: true,
           lastModified: true,
           users: {
@@ -439,11 +408,13 @@ const chatController = {
           lastModified: "desc",
         },
       });
-
       res.json(chats);
     } catch (err) {
-      console.log(err);
-      next(err);
+      console.error("Something went wrong during fetching group chats: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during fetching group chats. Please try again later.",
+      });
     }
   },
 
@@ -463,10 +434,16 @@ const chatController = {
         },
         select: { id: true },
       });
-
       res.json(unreadMessages.length);
     } catch (err) {
-      next(err);
+      console.error(
+        "Something went wrong during fetching unread messages: ",
+        err
+      );
+      return res.status(500).json({
+        message:
+          "Something went wrong during fetching unread messages. Please try again later.",
+      });
     }
   },
 
@@ -574,7 +551,6 @@ const chatController = {
     try {
       const { chatId } = req.params;
       const userId = req.user.id;
-
       const unreadMessages = await prisma.message.findMany({
         where: {
           chatId,
@@ -587,10 +563,7 @@ const chatController = {
         },
         select: { id: true },
       });
-
       const messageIds = unreadMessages.map((msg) => msg.id);
-
-      // Mark these messages as read by this user
       if (messageIds.length > 0) {
         await prisma.messageReadStatus.createMany({
           data: messageIds.map((messageId) => ({
@@ -600,86 +573,25 @@ const chatController = {
           })),
         });
       }
-
       res.json({ message: "Message status updated successfully" });
     } catch (err) {
-      next(err);
+      console.error(
+        "Something went wrong during updating message status: ",
+        err
+      );
+      return res.status(500).json({
+        message:
+          "Something went wrong during updating message status. Please try again later.",
+      });
     }
   },
-
-  // async getMessagesByChat(req, res, next) {
-  //   try {
-  //     const { chatId } = req.params;
-  //     const { cursor } = req.query;
-
-  //     const chat = await prisma.chat.findFirst({
-  //       where: {
-  //         id: chatId,
-  //         users: { some: { id: req.user.id } },
-  //       },
-  //     });
-
-  //     if (!chat) {
-  //       return res.status(404).json({
-  //         error: "Chat not found or user is not a member of this chat",
-  //       });
-  //     }
-
-  //     const deletedChat = await prisma.deletedChat.findUnique({
-  //       where: { userId_chatId: { userId: req.user.id, chatId } },
-  //     });
-
-  //     const whereCondition = {
-  //       chatId,
-  //     };
-
-  //     if (deletedChat) {
-  //       whereCondition.timestamp = { gt: deletedChat.deletedAt };
-  //     }
-
-  //     if (cursor) {
-  //       whereCondition.timestamp = {
-  //         ...(whereCondition.timestamp || {}),
-  //         lt: new Date(cursor),
-  //       };
-  //     }
-
-  //     const messages = await prisma.message.findMany({
-  //       where: whereCondition,
-  //       orderBy: { timestamp: "desc" },
-  //       take: 20,
-  //       include: {
-  //         sender: {
-  //           select: {
-  //             name: true,
-  //             email: true,
-  //             profilePic: true,
-  //             dob: true,
-  //           },
-  //         },
-  //         MessageReadStatus: {
-  //           where: { userId: req.user.id },
-  //         },
-  //       },
-  //     });
-
-  //     res.json({ messages: messages.reverse(), chat });
-  //   } catch (err) {
-  //     next(err);
-  //   }
-  // },
-
-  // controllers/messageController.ts
 
   async getMessagesByChat(req, res, next) {
     try {
       const { chatId } = req.params;
       const { cursor } = req.query;
       const userId = req.user.id;
-
       const limit = 20;
-
-      // Check if user is a participant of the chat
       const chat = await prisma.chat.findFirst({
         where: {
           id: chatId,
@@ -688,14 +600,11 @@ const chatController = {
           },
         },
       });
-
       if (!chat) {
         return res.status(404).json({
           error: "Chat not found or user is not a member of this chat",
         });
       }
-
-      // Check if user has deleted the chat before
       const deletedChat = await prisma.deletedChat.findUnique({
         where: {
           userId_chatId: {
@@ -704,8 +613,6 @@ const chatController = {
           },
         },
       });
-
-      // Prepare where condition
       const whereCondition = {
         chatId,
         ...(deletedChat && {
@@ -720,8 +627,6 @@ const chatController = {
           },
         }),
       };
-
-      // Fetch messages with pagination
       const messages = await prisma.message.findMany({
         where: whereCondition,
         orderBy: { timestamp: "desc" },
@@ -736,17 +641,21 @@ const chatController = {
           chat: true,
         },
       });
-
       const hasMore = messages.length > limit;
       const messagesToReturn = hasMore ? messages.slice(0, limit) : messages;
-
       return res.status(200).json({
         messages: messagesToReturn,
-        nextCursor: hasMore ? messagesToReturn.at(-1)?.timestamp : null, // using timestamp here
+        nextCursor: hasMore ? messagesToReturn.at(-1)?.timestamp : null,
       });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Failed to fetch messages" });
+    } catch (err) {
+      console.error(
+        "Something went wrong during fetching chat messages: ",
+        err
+      );
+      return res.status(500).json({
+        message:
+          "Something went wrong during fetching chat messages. Please try again later.",
+      });
     }
   },
 
@@ -754,7 +663,6 @@ const chatController = {
     try {
       const { chatId } = req.params;
       const currentUserId = req.user.id;
-
       const chat = await prisma.chat.findUnique({
         where: { id: chatId },
         select: {
@@ -763,11 +671,9 @@ const chatController = {
           users: { select: { id: true } },
         },
       });
-
       if (!chat) {
         return res.status(404).json({ error: "Chat not found" });
       }
-
       if (!chat.isGroup) {
         await prisma.deletedChat.upsert({
           where: {
@@ -785,105 +691,35 @@ const chatController = {
             deletedAt: new Date(),
           },
         });
-
         return res
           .status(200)
           .json({ message: "Chat deleted for current user." });
       }
-
       if (chat.isGroup) {
         if (chat.adminId === currentUserId) {
           return res
             .status(403)
             .json({ error: "Admins cannot delete the group chat." });
         }
-
         await prisma.chat.update({
           where: { id: chatId },
           data: {
             users: { disconnect: { id: currentUserId } },
           },
         });
-
         return res.status(200).json({
           message:
             "You have been removed from the group and will no longer see this chat.",
         });
       }
     } catch (err) {
-      next(err);
+      console.error("Something went wrong during deleting chat: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during deleting chat. Please try again later.",
+      });
     }
   },
-
-  // async updateGroupChat(req, res, next) {
-  //   try {
-  //     const { chatId } = req.params;
-  //     const { name, logo, newUserIds } = req.body;
-  //     const currentUserId = req.user.id;
-
-  //     const chat = await prisma.chat.findUnique({
-  //       where: { id: chatId },
-  //       include: {
-  //         users: {
-  //           select: {
-  //             id: true,
-  //             name: true,
-  //             email: true,
-  //           },
-  //         },
-  //       },
-  //     });
-
-  //     if (!chat) {
-  //       return res.status(404).json({ error: "Group chat not found" });
-  //     }
-
-  //     if (chat.adminId !== currentUserId) {
-  //       return res
-  //         .status(403)
-  //         .json({ error: "Only the admin can update the group chat" });
-  //     }
-
-  //     const updateData = {
-  //       lastModified: new Date(),
-  //     };
-
-  //     if (name) updateData.name = name;
-  //     if (logo) updateData.logo = logo;
-
-  //     if (newUserIds && newUserIds.length > 0) {
-  //       const existingUserIds = chat.users.map((user) => user.id);
-  //       const validNewUserIds = newUserIds.filter(
-  //         (id) => !existingUserIds.includes(id)
-  //       );
-
-  //       updateData.userIds = {
-  //         set: [...existingUserIds, ...validNewUserIds],
-  //       };
-
-  //       updateData.users = {
-  //         connect: validNewUserIds.map((id) => ({ id })),
-  //       };
-  //     }
-
-  //     const updatedChat = await prisma.chat.update({
-  //       where: { id: chatId },
-  //       data: updateData,
-  //       include: {
-  //         users: {
-  //           select: {
-  //             name: true,
-  //             email: true,
-  //           },
-  //         },
-  //       },
-  //     });
-
-  //     res.json(updatedChat);
-  //   } catch (err) {
-  //     next(err);
-  //   }
-  // },
 
   //if sending invitelink via email
   // async  sendInviteLink(req, res, next) {
@@ -891,13 +727,8 @@ const chatController = {
   //     const { chatId } = req.params;
   //     const currentUserId = req.user.id;
   //     const { email } = req.body;
-
-  //
   //     const inviteLink = await generateInviteLink(chatId, currentUserId);
-
-  //
   //     await sendEmail(email, inviteLink);
-
   //     res.json({ message: 'Invite link sent successfully' });
   //   } catch (err) {
   //     next(err);
@@ -905,19 +736,23 @@ const chatController = {
   // },
   // async  sendEmail(email, inviteLink) {
   //   console.log(`Sending invite link to ${email}: ${inviteLink}`);
-  //
   // },
 
   async generateInvite(req, res, next) {
     try {
       const { chatId } = req.params;
-      console.log("ChatId", chatId);
       const currentUserId = req.user.id;
       const inviteLink = await generateInviteLink(chatId, currentUserId);
-
       res.status(200).json({ inviteLink });
     } catch (err) {
-      next(err);
+      console.error(
+        "Something went wrong during generating invite link: ",
+        err
+      );
+      return res.status(500).json({
+        message:
+          "Something went wrong during generating invite link. Please try again later.",
+      });
     }
   },
 
@@ -925,7 +760,6 @@ const chatController = {
     try {
       const { inviteToken } = req.params;
       const currentUserId = req.user.id;
-
       const invite = await prisma.inviteToken.findUnique({
         where: { token: inviteToken },
         include: {
@@ -940,23 +774,19 @@ const chatController = {
           },
         },
       });
-
       if (!invite) {
         return res
           .status(404)
           .json({ error: "Invalid or expired invite token" });
       }
-
       if (new Date() > invite.expiresAt) {
         return res.status(400).json({ error: "Invite token has expired" });
       }
-
       if (invite.chat.users.some((user) => user.id === currentUserId)) {
         return res
           .status(400)
           .json({ error: "You are already a member of this group chat" });
       }
-
       const updatedChat = await prisma.chat.update({
         where: { id: invite.chatId },
         data: {
@@ -977,17 +807,19 @@ const chatController = {
           },
         },
       });
-
       // await prisma.inviteToken.delete({
       //   where: { token: inviteToken },
       // });
-
       res.json({
         message: "Successfully joined the group chat",
         chatId: updatedChat.id,
       });
     } catch (err) {
-      next(err);
+      console.error("Something went wrong during accepting invite link: ", err);
+      return res.status(500).json({
+        message:
+          "Something went wrong during accepting invite link. Please try again later.",
+      });
     }
   },
 
@@ -996,11 +828,9 @@ const chatController = {
       const { chatId } = req.params;
       const currentUserId = req.user.id;
       const { userIds } = req.body;
-
       if (!Array.isArray(userIds) || userIds.length === 0) {
         return res.status(400).json({ error: "Invalid userIds array" });
       }
-
       const chat = await prisma.chat.findUnique({
         where: { id: chatId },
         include: {
@@ -1011,23 +841,19 @@ const chatController = {
           },
         },
       });
-
       if (!chat) {
         return res.status(404).json({ error: "Group chat not found" });
       }
-
       if (!chat.isGroup) {
         return res
           .status(400)
           .json({ error: "Operation allowed only for group chats" });
       }
-
       if (chat.adminId !== currentUserId) {
         return res
           .status(403)
           .json({ error: "Only the admin can remove members" });
       }
-
       const chatUserIds = chat.users.map((user) => user.id);
       for (const userId of userIds) {
         if (!chatUserIds.includes(userId)) {
@@ -1036,7 +862,6 @@ const chatController = {
           });
         }
       }
-
       const updatedChat = await prisma.chat.update({
         where: { id: chatId },
         data: {
@@ -1057,10 +882,16 @@ const chatController = {
           },
         },
       });
-
       res.json({ message: "Users removed successfully", chat: updatedChat });
     } catch (err) {
-      next(err);
+      console.error(
+        "Something went wrong during removing group members: ",
+        err
+      );
+      return res.status(500).json({
+        message:
+          "Something went wrong during removing group members. Please try again later.",
+      });
     }
   },
 };

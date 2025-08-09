@@ -23,9 +23,9 @@ type ChatRowProps = {
   onClick?: () => void;
   selectable?: boolean;
   isGroup?: boolean;
-  onEditClick?: (chat: ChatPreview) => void; // ✅ Add this
-  currentUserId?: string; // ✅ Optional
-  fullChat?: ChatPreview; // ✅ add this
+  onEditClick?: (chat: ChatPreview) => void;
+  currentUserId?: string;
+  fullChat?: ChatPreview;
   onViewMembersClick?: (chat: ChatPreview) => void;
 };
 
@@ -73,12 +73,9 @@ const ChatRow: FC<ChatRowProps> = ({
   useEffect(() => {
     ablyRef.current = new Ably.Realtime(import.meta.env.VITE_ABLY_API_KEY!);
     const channel = ablyRef.current.channels.get(`chat-${chatId}`);
-
     const handleTyping = (msg: AblyMessage) => {
-      console.log(msg);
       const { userId: senderId, userName } = msg.data || {};
       if (senderId === user?.id || !userName) return;
-
       if (isGroup) {
         setTypingUsers((prev) => {
           const set = new Set(prev);
@@ -103,9 +100,7 @@ const ChatRow: FC<ChatRowProps> = ({
         }, TYPING_DELAY);
       }
     };
-
     channel.subscribe("typing", handleTyping);
-
     return () => {
       channel.unsubscribe("typing", handleTyping);
       Object.values(typingTimeouts.current).forEach(clearTimeout);
@@ -209,7 +204,6 @@ const ChatRow: FC<ChatRowProps> = ({
           >
             {time}
           </span>
-
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -242,7 +236,6 @@ const ChatRow: FC<ChatRowProps> = ({
               ✏️ Edit Group
             </button>
           )}
-
           <button
             onClick={() => {
               setShowConfirm(true);
@@ -256,12 +249,9 @@ const ChatRow: FC<ChatRowProps> = ({
 
           <button
             onClick={() => {
-              console.log("VIEW1");
               if (fullChat) {
-                console.log("VIEW2");
                 onViewMembersClick?.(fullChat);
               }
-              console.log("VIEW3");
               setShowMenu(false);
             }}
             className="w-full flex items-center px-3 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-600 dark:text-blue-400"
@@ -270,7 +260,6 @@ const ChatRow: FC<ChatRowProps> = ({
           </button>
         </div>
       )}
-
       <ConfirmDialog
         isOpen={showConfirm}
         onCancel={() => setShowConfirm(false)}

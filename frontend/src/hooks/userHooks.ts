@@ -22,11 +22,10 @@ export const useUserSearch = (query: string) => {
 
 export const useUpdateProfile = () => {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: (formData: FormData) => updateProfile(formData),
     onSuccess: () => {
-      queryClient.refetchQueries({ queryKey: ["myDetails"] }); // ✅ Force refetch
+      queryClient.refetchQueries({ queryKey: ["myDetails"] });
     },
   });
 };

@@ -6,7 +6,6 @@ const authMiddleware = async (req, res, next) => {
   if (!authHeader) {
     return res.status(401).json({ message: "Unauthorized. Please log in." });
   }
-
   const token = authHeader.split(" ")[1];
   let user;
   try {
@@ -22,7 +21,7 @@ const authMiddleware = async (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
-    console.log(err);
+    console.error("Unauthorized. Invalid token: ", err);
     return res.status(401).json({ message: "Unauthorized. Invalid token." });
   }
 };
