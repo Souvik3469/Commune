@@ -13,6 +13,10 @@ const TestAccountNote = () => {
       <p className="text-xs text-gray-400 mt-1">
         Password is same as the email.
       </p>
+      <p className="text-xs text-gray-400 mt-1">
+        Please note: All changes made using these accounts are automatically
+        reset at 12:00 AM IST daily to ensure a consistent testing environment.
+      </p>
     </div>
   );
 };

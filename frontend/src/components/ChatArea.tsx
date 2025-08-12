@@ -212,13 +212,6 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
       </div>
     );
   }
-  // if (isChatLoading) {
-  //   return (
-  //     <div className="h-[82%] flex items-center justify-center text-gray-500 dark:text-gray-400">
-  //       Loading chat details...
-  //     </div>
-  //   );
-  // }
 
   return (
     <div
@@ -266,7 +259,10 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
             >
               <div>
                 <img
-                  src={msg?.sender?.profilePic || "https://i.pravatar.cc/150"}
+                  src={
+                    msg?.sender?.profilePic ||
+                    "https://static.vecteezy.com/system/resources/thumbnails/009/292/244/small_2x/default-avatar-icon-of-social-media-user-vector.jpg"
+                  }
                   alt={`${msg?.sender?.name} avatar`}
                   className={`h-8 w-8 rounded-full mx-2 ${
                     showHeader ? "" : "invisible"

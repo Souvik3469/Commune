@@ -2,9 +2,9 @@
   "name": "commune-backend",
   "version": "1.0.0",
   "description": "commune-backend",
-  "main": "app.js",
+  "main": "src/app.js",
   "scripts": {
-    "start": "node build/app.js",
+    "start": "npm run build && node build/app.js",
     "dev": "nodemon --exec babel-node src/app.js",
     "build": "babel src -s -d build --copy-files",
     "lint": "eslint src/**/*.js",
