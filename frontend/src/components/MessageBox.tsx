@@ -9,6 +9,7 @@ import Picker from "@emoji-mart/react";
 import data from "@emoji-mart/data";
 import { useTheme } from "../context/ThemeContext";
 import { EmojiSelectEvent } from "../types/generic";
+import toast from "react-hot-toast";
 
 const ably = new Ably.Realtime(import.meta.env.VITE_ABLY_API_KEY!);
 const TYPING_DELAY = 1000;
@@ -22,6 +23,7 @@ type MessageBoxProps = {
 const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
   const [content, setContent] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   const typingTimeout = useRef<NodeJS.Timeout | null>(null);
   const refreshTypingInterval = useRef<NodeJS.Timeout | null>(null);
@@ -29,7 +31,7 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
   const channelRef = useRef<ReturnType<typeof ably.channels.get> | null>(null);
 
   const { data: user } = useMyDetails();
-  const { mutate: sendMessage } = useSendMessage(() => {
+  const { mutateAsync: sendMessage } = useSendMessage(() => {
     setTimeout(() => scrollToBottom(), 100);
   });
   const { isDarkMode } = useTheme();
@@ -47,25 +49,33 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
     };
   }, [chatId]);
 
-  const handleSend = () => {
-    if (!content.trim()) return;
-    sendMessage(
-      { chatId, content },
-      {
-        onSuccess: () => {
-          const channel = ably.channels.get(`chat-${chatId}`);
-          channel.publish("new-message", {
-            chatId,
-            content,
-            senderName: user?.name,
-            createdAt: new Date().toISOString(),
-          });
-          setContent("");
-          setShowEmojiPicker(false);
-          setTimeout(() => scrollToBottom(), 100);
-        },
-      }
-    );
+  const handleSend = async () => {
+    if (!content.trim() || isSending) return;
+
+    setIsSending(true);
+    try {
+      await sendMessage({ chatId, content });
+      const channel = ably.channels.get(`chat-${chatId}`);
+      channel.publish("new-message", {
+        chatId,
+        content,
+        senderName: user?.name,
+        createdAt: new Date().toISOString(),
+      });
+
+      setContent("");
+      setShowEmojiPicker(false);
+      scrollToBottom();
+
+      // toast.success("Message sent", { id: "send-message" });
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      toast.error("Failed to send message. Please try again.", {
+        id: "send-message",
+      });
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleTyping = () => {
@@ -106,22 +116,24 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
   };
 
   return (
-    <div className="bg-white dark:bg-black sticky bottom-0 z-10 border-t-[1px] border-gray-300 dark:border-gray-600">
+    <div className="bg-white dark:bg-black sticky bottom-0 z-10 border-t border-gray-300 dark:border-gray-600">
       <div className="grid grid-cols-12 px-4 sm:px-8 py-2 relative">
-        <div className="col-span-9 flex items-center text-white relative">
+        <div className="col-span-9 flex items-center relative">
           <FaRegFaceSmile
             className="text-gray-500 text-xl cursor-pointer"
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            onClick={() => setShowEmojiPicker((prev) => !prev)}
           />
           <input
             className="mx-2 dark:bg-black w-full p-1 placeholder-gray-500 text-black dark:text-white"
             placeholder="Type message..."
             value={content}
+            disabled={isSending}
             onChange={(e) => {
               setContent(e.target.value);
               handleTyping();
             }}
             onKeyDown={(e) => {
+              if (isSending) return;
               handleTyping();
               if (e.key === "Enter") handleSend();
             }}
@@ -140,11 +152,14 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
           <FaMicrophone className="text-xl text-gray-500" />
           <CgAttachment className="text-xl text-gray-500" />
           <button
-            className="bg-[#00A3FF] text-white flex items-center p-1 rounded-md px-2"
+            className={`bg-[#00A3FF] text-white flex items-center p-1 rounded-md px-2 ${
+              isSending ? "opacity-60 cursor-not-allowed" : ""
+            }`}
             onClick={handleSend}
+            disabled={isSending}
           >
-            <span className="text-sm">Send</span>
-            <RiSendPlaneFill className="text-xl ml-2" />
+            <span className="text-sm">{isSending ? "Sending..." : "Send"}</span>
+            {!isSending && <RiSendPlaneFill className="text-xl ml-2" />}
           </button>
         </div>
       </div>

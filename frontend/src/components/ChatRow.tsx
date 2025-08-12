@@ -246,18 +246,19 @@ const ChatRow: FC<ChatRowProps> = ({
             <Trash2 size={16} className="mr-2" />
             {isGroup ? "Leave Group" : "Delete Chat"}
           </button>
-
-          <button
-            onClick={() => {
-              if (fullChat) {
-                onViewMembersClick?.(fullChat);
-              }
-              setShowMenu(false);
-            }}
-            className="w-full flex items-center px-3 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-600 dark:text-blue-400"
-          >
-            👥 View Members
-          </button>
+          {isGroup && (
+            <button
+              onClick={() => {
+                if (fullChat) {
+                  onViewMembersClick?.(fullChat);
+                }
+                setShowMenu(false);
+              }}
+              className="w-full flex items-center px-3 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-600 dark:text-blue-400"
+            >
+              👥 View Members
+            </button>
+          )}
         </div>
       )}
       <ConfirmDialog
