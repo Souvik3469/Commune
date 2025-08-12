@@ -20,6 +20,7 @@ import { formatDistanceToNow } from "date-fns";
 import Ably from "ably";
 import type { Message as AblyMessage } from "ably";
 import { UserPreview } from "../types/user";
+import toast from "react-hot-toast";
 
 const MAX_MSG_LENGTH = 30;
 
@@ -61,38 +62,70 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
   const ablyRef = useRef<Ably.Realtime | null>(null);
 
   useEffect(() => {
-    ablyRef.current = new Ably.Realtime({
-      key: import.meta.env.VITE_ABLY_API_KEY!,
-      echoMessages: true,
-    });
-    const ably = ablyRef.current;
-    const allChats = [...oneToOneChats, ...groupChats];
-    allChats.forEach((chat) => {
-      const channel = ably.channels.get(`chat-${chat.id}`);
-      channel.subscribe("new-message", (message: AblyMessage) => {
-        const data = message.data;
-        if (data?.content && data?.createdAt) {
-          setUpdatedChats((prev) => ({
-            ...prev,
-            [chat.id]: {
-              content: data.content,
-              timestamp: data.createdAt,
-            },
-          }));
-        }
+    try {
+      ablyRef.current = new Ably.Realtime({
+        key: import.meta.env.VITE_ABLY_API_KEY!,
+        echoMessages: true,
       });
+    } catch (err) {
+      console.error("Failed to initialize Ably:", err);
+      return;
+    }
+
+    const ably = ablyRef.current!;
+    const allChats = [...oneToOneChats, ...groupChats];
+
+    allChats.forEach((chat) => {
+      try {
+        const channel = ably.channels.get(`chat-${chat.id}`);
+
+        channel.subscribe("new-message", (message: AblyMessage) => {
+          const data = message.data;
+          if (data?.content && data?.createdAt) {
+            setUpdatedChats((prev) => ({
+              ...prev,
+              [chat.id]: {
+                content: data.content,
+                timestamp: data.createdAt,
+              },
+            }));
+          }
+        });
+      } catch (err) {
+        console.error(`Error subscribing to chat-${chat.id}:`, err);
+      }
     });
+
     return () => {
       allChats.forEach((chat) => {
-        const channel = ably.channels.get(`chat-${chat.id}`);
-        channel.unsubscribe();
-        channel.detach();
+        try {
+          const channel = ably.channels.get(`chat-${chat.id}`);
+          channel.unsubscribe();
+          channel.detach();
+        } catch (err) {
+          console.error(`Error cleaning up chat-${chat.id} channel:`, err);
+        }
       });
-      ably.close();
+
+      try {
+        ably.close();
+      } catch (err) {
+        console.error("Error closing Ably connection:", err);
+      }
     };
   }, [oneToOneChats, groupChats]);
 
-  const createChatMutation = useCreateChat();
+  const createOneToOneMutation = useCreateChat();
+  const createGroupMutation = useCreateChat();
+  const updateChatMutation = useUpdateChat();
+
+  const [pendingCreatingUserId, setPendingCreatingUserId] = useState<
+    string | null
+  >(null);
+
+  const isCreatingGroupLoading = createGroupMutation.isPending;
+  const isUpdatingGroupLoading = updateChatMutation.isPending;
+
   const { data: rawSearchResults = [] } = useUserSearch(searchQuery);
   const searchResults = useMemo(
     () => rawSearchResults.filter((u: UserPreview) => u.id !== user?.id),
@@ -118,15 +151,25 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
   };
 
   const handleCreateChat = async (userId: string) => {
+    if (pendingCreatingUserId === userId) {
+      return;
+    }
+    setPendingCreatingUserId(userId);
+    const toastId = `create-chat-${userId}`;
+    // toast.loading("Creating chat...", { id: toastId });
     try {
-      const newChat = await createChatMutation.mutateAsync({
+      const newChat = await createOneToOneMutation.mutateAsync({
         isGroup: false,
         userIds: [userId],
       });
+      // toast.success("Chat created", { id: toastId });
       setSearchQuery("");
       setSelectedChat(newChat);
     } catch (err) {
       console.error("Chat creation failed", err);
+      toast.error("Failed to create chat. Please try again.", { id: toastId });
+    } finally {
+      setPendingCreatingUserId(null);
     }
   };
 
@@ -140,13 +183,17 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
 
   const handleCreateGroup = async () => {
     if (!groupName.trim() || selectedUsers.length === 0) return;
+    if (isCreatingGroupLoading) return;
+    const toastId = "create-group";
+    toast.loading("Creating group...", { id: toastId });
     try {
-      const newGroup = await createChatMutation.mutateAsync({
+      const newGroup = await createGroupMutation.mutateAsync({
         isGroup: true,
         name: groupName,
         userIds: selectedUsers,
         logo: groupLogo,
       });
+      toast.success("Group created", { id: toastId });
       setGroupName("");
       setSelectedUsers([]);
       setIsCreatingGroup(false);
@@ -156,17 +203,19 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
       setSelectedChat(newGroup);
     } catch (err) {
       console.error("Group creation failed", err);
+      toast.error("Failed to create group. Please try again.", { id: toastId });
     }
   };
 
-  const updateChatMutation = useUpdateChat();
-
   const handleUpdateGroup = async () => {
     if (!chatToEdit) return;
+    if (isUpdatingGroupLoading) return;
     const prevUserIds = originalUserIds;
     const newUserIds = selectedUsers;
     const addUserIds = newUserIds.filter((id) => !prevUserIds.includes(id));
     const removeUserIds = prevUserIds.filter((id) => !newUserIds.includes(id));
+    const toastId = "update-group";
+    toast.loading("Updating group...", { id: toastId });
     try {
       const updatedGroup = await updateChatMutation.mutateAsync({
         chatId: chatToEdit.id,
@@ -177,6 +226,7 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
           removeUserIds: removeUserIds.length ? removeUserIds : undefined,
         },
       });
+      toast.success("Group updated", { id: toastId });
       setGroupName("");
       setSelectedUsers([]);
       setOriginalUserIds([]);
@@ -188,6 +238,7 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
       setSelectedChat(updatedGroup);
     } catch (err) {
       console.error("Group update failed", err);
+      toast.error("Failed to update group. Please try again.", { id: toastId });
     }
   };
 
@@ -296,10 +347,13 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
             setSelectedUsers([]);
             setGroupName("");
           }}
+          disabled={isCreatingGroupLoading || isUpdatingGroupLoading}
+          title="Create group"
         >
           <FaPlus className="text-white text-xl" />
         </button>
       </div>
+
       {showMembersDialog && chatToViewMembers && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white dark:bg-gray-900 p-6 rounded-xl w-[90%] max-w-md shadow-xl">
@@ -338,7 +392,7 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
         </div>
       )}
 
-      {/* Group Creation Mode */}
+      {/* Group Creation / Edit Mode */}
       {isCreatingGroup || isEditingGroup ? (
         <div className="flex-1 overflow-y-auto mt-2 px-2">
           <ChatSection
@@ -374,6 +428,7 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
                 type="file"
                 accept="image/*"
                 onChange={(e) => {
+                  if (isCreatingGroupLoading || isUpdatingGroupLoading) return;
                   const file = e.target.files?.[0];
                   if (file) {
                     setGroupLogo(file);
@@ -381,6 +436,7 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
                   }
                 }}
                 className="text-sm"
+                disabled={isCreatingGroupLoading || isUpdatingGroupLoading}
               />
             </div>
 
@@ -390,18 +446,31 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
               onChange={(e) => setGroupName(e.target.value)}
               className="w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 text-sm dark:bg-black dark:text-white"
               placeholder="Enter group name"
+              disabled={isCreatingGroupLoading || isUpdatingGroupLoading}
             />
 
             <button
               onClick={isEditingGroup ? handleUpdateGroup : handleCreateGroup}
               className="w-full bg-blue-600 text-white py-2 rounded-md text-sm disabled:opacity-50"
-              disabled={selectedUsers.length === 0 || !groupName.trim()}
+              disabled={
+                selectedUsers.length === 0 ||
+                !groupName.trim() ||
+                isCreatingGroupLoading ||
+                isUpdatingGroupLoading
+              }
             >
-              {isEditingGroup ? "Save Changes" : "Create Group"}
+              {isEditingGroup
+                ? isUpdatingGroupLoading
+                  ? "Saving..."
+                  : "Save Changes"
+                : isCreatingGroupLoading
+                ? "Creating..."
+                : "Create Group"}
             </button>
 
             <button
               onClick={() => {
+                if (isCreatingGroupLoading || isUpdatingGroupLoading) return;
                 setIsCreatingGroup(false);
                 setIsEditingGroup(false);
                 setGroupName("");
@@ -413,6 +482,7 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
                 setChatToEdit(null);
               }}
               className="w-full text-sm text-gray-600 dark:text-gray-400"
+              disabled={isCreatingGroupLoading || isUpdatingGroupLoading}
             >
               Cancel
             </button>
@@ -431,9 +501,12 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
                 message: user.email || "Tap to start chat",
                 time: "",
                 avatarSrc: user.profilePic,
-                seen: true,
+                seen: pendingCreatingUserId === user.id ? false : true,
               }))}
-              onChatClick={handleCreateChat}
+              onChatClick={(id) => {
+                if (pendingCreatingUserId) return;
+                handleCreateChat(id);
+              }}
             />
           ) : (
             <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm">

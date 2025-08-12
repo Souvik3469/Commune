@@ -3,7 +3,7 @@ import { useLogin } from "../hooks/authHooks";
 import toast from "react-hot-toast";
 import { Link, useNavigate } from "react-router-dom";
 import TestAccountNote from "../components/TestAccountNote";
-import logo from "../assets/logo1.png"; // ✅ Logo import
+import logo from "../assets/logo1.png";
 
 const Login = () => {
   const navigate = useNavigate();
