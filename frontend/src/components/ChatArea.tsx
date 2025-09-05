@@ -309,9 +309,11 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
                           isOwn ? "justify-end" : "justify-start"
                         }`}
                       >
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mx-1">
-                          Seen
-                        </div>
+                        {isOwn && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mx-1">
+                            Seen
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
