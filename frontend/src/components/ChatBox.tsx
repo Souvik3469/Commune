@@ -1,20 +1,45 @@
-import { FC, useRef } from "react";
+import { FC, useEffect, useRef } from "react";
 import ChatBar from "./ChatBar";
 import ChatArea from "./ChatArea";
 import MessageBox from "./MessageBox";
 import { ChatPreview } from "../types/chat";
+import { useMyDetails } from "../hooks/userHooks";
+import { useCall } from "../context/CallContext";
 
-type ChatBoxProps = {
-  className?: string;
-  chat: ChatPreview | null;
-};
+type ChatBoxProps = { className?: string; chat: ChatPreview | null };
 
 const ChatBox: FC<ChatBoxProps> = ({ className, chat }) => {
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const { data: user } = useMyDetails();
+  const { joinRoom, leaveRoom } = useCall();
 
-  const scrollToBottom = () => {
+  const currentUserId = user?.id;
+
+  useEffect(() => {
+    if (!chat || !currentUserId || !user) return;
+
+    const otherUser = chat?.users?.find((u) => u.id !== currentUserId);
+
+    const callerDisplayName = user.name || "Unknown";
+    const callerDisplayAvatar = user.profilePic || "";
+
+    const roomId = chat.id.toString();
+
+    joinRoom(
+      roomId,
+      currentUserId,
+      callerDisplayName,
+      callerDisplayAvatar,
+      otherUser?.id ?? null
+    );
+
+    return () => {
+      leaveRoom();
+    };
+  }, [chat, currentUserId, user, joinRoom, leaveRoom]);
+
+  const scrollToBottom = () =>
     bottomRef.current?.scrollIntoView({ behavior: "auto" });
-  };
 
   if (!chat) {
     return (

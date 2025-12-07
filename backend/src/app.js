@@ -37,31 +37,60 @@ const io = new Server(httpServer, {
 });
 
 io.on("connection", (socket) => {
+  // Register user globally
+  socket.on("register", ({ userId }) => {
+    socket.data.userId = userId;
+    socket.join(`user-${userId}`);
+  });
+
+  // Join chat room
   socket.on("join", ({ roomId, userId }) => {
     socket.data.userId = userId;
-    socket.join(roomId);
+    if (roomId) socket.join(roomId);
   });
 
   socket.on("leave", ({ roomId }) => {
-    socket.leave(roomId);
+    if (roomId) socket.leave(roomId);
   });
 
-  socket.on("offer", ({ roomId, from, offer, video }) => {
-    socket.to(roomId).emit("offer", { from, offer, video });
+  // --- WebRTC Signaling ---
+  socket.on(
+    "offer",
+    ({ roomId, from, offer, video, to, callerName, callerAvatar }) => {
+      const payload = { from, offer, video, callerName, callerAvatar };
+      if (to) {
+        socket.to(`user-${to}`).emit("offer", payload); // ✅ direct call
+      } else if (roomId) {
+        socket.to(roomId).emit("offer", payload); // ✅ group call
+      }
+    }
+  );
+
+  socket.on("answer", ({ roomId, from, answer, to }) => {
+    const payload = { from, answer };
+    if (to) {
+      socket.to(`user-${to}`).emit("answer", payload);
+    } else if (roomId) {
+      socket.to(roomId).emit("answer", payload);
+    }
   });
 
-  socket.on("answer", ({ roomId, from, answer }) => {
-    socket.to(roomId).emit("answer", { from, answer });
+  socket.on("candidate", ({ roomId, candidate, to }) => {
+    const payload = { from: socket.data.userId, candidate };
+    if (to) {
+      socket.to(`user-${to}`).emit("candidate", payload);
+    } else if (roomId) {
+      socket.to(roomId).emit("candidate", payload);
+    }
   });
 
-  socket.on("candidate", ({ roomId, candidate }) => {
-    socket
-      .to(roomId)
-      .emit("candidate", { from: socket.data.userId, candidate });
-  });
-
-  socket.on("end-call", ({ roomId }) => {
-    socket.to(roomId).emit("end-call", { from: socket.data.userId });
+  socket.on("end-call", ({ roomId, to }) => {
+    const payload = { from: socket.data.userId };
+    if (to) {
+      socket.to(`user-${to}`).emit("end-call", payload);
+    } else if (roomId) {
+      socket.to(roomId).emit("end-call", payload);
+    }
   });
 });
 
