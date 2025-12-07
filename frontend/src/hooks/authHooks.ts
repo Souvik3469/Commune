@@ -1,4 +1,3 @@
-// hooks/authHooks.ts
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   sendOtp,

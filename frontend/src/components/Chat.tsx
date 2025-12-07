@@ -5,6 +5,8 @@ import ChatBox from "./ChatBox";
 import Notifications from "./Notifications";
 import Settings from "./Settings";
 import { ChatPreview } from "../types/chat";
+import { useMyDetails } from "../hooks/userHooks";
+import { useCall } from "../context/CallContext";
 
 const Chat = () => {
   const [active, setActive] = useState("home");
@@ -21,6 +23,13 @@ const Chat = () => {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+  const { data: user } = useMyDetails();
+  const { registerUser } = useCall();
+
+  useEffect(() => {
+    // when user loads, register socket globally
+    registerUser(user?.id ?? null);
+  }, [user?.id, registerUser]);
 
   return (
     <div className="flex dark:bg-black">
