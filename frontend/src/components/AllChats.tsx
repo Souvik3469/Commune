@@ -311,13 +311,48 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
     <div
       className={`w-[30%] h-screen border-r border-gray-300 dark:border-gray-700 flex flex-col ${className}`}
     >
-      {/* Logo */}
-      <div className="mt-1 mb-2">
-        <div className="flex items-center my-2 px-2">
+      {/* Logo with info tooltip */}
+      <div className="mt-1 mb-2 relative">
+        <div className="flex items-center my-2 px-2 gap-1">
           <img src={logo} className="h-12 w-12" />
-          <div className="text-2xl font-bold ml-1 mt-1">
+
+          <div className="text-2xl font-bold ml-1 mt-1 flex items-center ">
             <span className="text-blue-600 dark:text-blue-400">Com</span>
             <span className="text-blue-300 dark:text-white">mune</span>
+
+            {/* Info icon */}
+            <div className="relative group ml-2 mt-1">
+              <button
+                type="button"
+                aria-label="Sandbox info"
+                className="flex h-4 w-4 items-center justify-center rounded-full border border-gray-400 dark:border-gray-600 text-[10px] font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                i
+              </button>
+
+              {/* Tooltip */}
+              <div
+                className="
+            absolute left-1/2 top-full z-[9999] mt-2 w-72
+            -translate-x-1/2 rounded-md border border-gray-200
+            dark:border-gray-700 bg-white dark:bg-gray-900
+            px-3 py-2 text-xs text-gray-700 dark:text-gray-300
+            shadow-lg opacity-0 invisible
+            group-hover:opacity-100 group-hover:visible
+            transition-opacity duration-150
+            pointer-events-none
+          "
+              >
+                <p className="font-medium text-gray-900 dark:text-gray-100 mb-1">
+                  Sandbox environment
+                </p>
+                <p className="font-medium text-gray-900 dark:text-gray-100">
+                  NOTE: Data created using the test accounts (
+                  <strong>user1@gmail.com - user5@gmail.com</strong>){" "}
+                  automatically reset daily at <strong>12:00 AM IST</strong>.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

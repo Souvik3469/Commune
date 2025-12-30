@@ -4,6 +4,7 @@
   "description": "commune-backend",
   "main": "src/app.js",
   "scripts": {
+    "backup:sandbox": "node src/v1/scripts/sandboxBackup.js",
     "start": "npm run build && node build/app.js",
     "dev": "nodemon --exec babel-node src/app.js",
     "build": "babel src -s -d build --copy-files",
