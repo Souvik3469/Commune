@@ -137,10 +137,11 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 
 httpServer.listen(PORT, () => {
-  console.log(`🚀 Server running @ http://localhost:${PORT}`);
-  console.log(`Connected to ${process.env.DATABASE_URL}`);
+  console.log(`🚀 Server running @ ${BACKEND_URL}`);
+  console.log(`Connected to MONGODB`);
 });
 
 // httpServer.listen(PORT, "0.0.0.0", () => {
