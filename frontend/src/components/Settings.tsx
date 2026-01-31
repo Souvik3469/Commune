@@ -58,8 +58,10 @@ const Settings: FC<SettingsProps> = ({ className }) => {
   };
 
   return (
-    <div className={`px-4 py-8 h-screen w-full max-w-xl mx-auto ${className}`}>
-      <div className="bg-white dark:bg-gray-900 shadow-sm border border-gray-200 dark:border-gray-700 rounded-xl p-6">
+    <div
+      className={`min-h-screen flex items-center justify-center px-4 ${className}`}
+    >
+      <div className="w-full max-w-xl bg-white dark:bg-gray-900 shadow-sm border border-gray-200 dark:border-gray-700 rounded-xl p-6">
         <h2 className="text-xl font-semibold mb-6 text-gray-900 dark:text-white">
           Edit Profile
         </h2>

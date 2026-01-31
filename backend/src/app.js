@@ -9,12 +9,21 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import morgan from "morgan";
 import { Server } from "socket.io";
+import { startSandboxCron } from "./v1/cron/sandboxReset.cron";
 
 const app = express();
 const type = process.env.REACT_APP_TYPE;
 
-const devOrigins = [process.env.DEV_URL1, process.env.DEV_URL2];
-const prodOrigins = [process.env.PROD_URL1, process.env.PROD_URL2];
+const devOrigins = [
+  process.env.DEV_URL1,
+  process.env.DEV_URL2,
+  process.env.DEV_URL3,
+];
+const prodOrigins = [
+  process.env.PROD_URL1,
+  process.env.PROD_URL2,
+  process.env.PROD_URL3,
+];
 const corsOrigins = type === "dev" ? devOrigins : prodOrigins;
 
 const httpServer = http.createServer(app);
@@ -59,9 +68,9 @@ io.on("connection", (socket) => {
     ({ roomId, from, offer, video, to, callerName, callerAvatar }) => {
       const payload = { from, offer, video, callerName, callerAvatar };
       if (to) {
-        socket.to(`user-${to}`).emit("offer", payload); // ✅ direct call
+        socket.to(`user-${to}`).emit("offer", payload);
       } else if (roomId) {
-        socket.to(roomId).emit("offer", payload); // ✅ group call
+        socket.to(roomId).emit("offer", payload);
       }
     }
   );
@@ -115,6 +124,8 @@ app.all("/", (req, res) =>
   res.send({ message: "API is Up and Running on render 😎🚀" })
 );
 
+startSandboxCron();
+
 // 404 handler
 app.use((req, res, next) => next(createError.NotFound()));
 
@@ -126,11 +137,13 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-// httpServer.listen(PORT, () => {
-//   console.log(`🚀 Server running @ http://localhost:${PORT}`);
-//   console.log(`Connected to ${process.env.DATABASE_URL}`);
-// });
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 
-httpServer.listen(PORT, "0.0.0.0", () => {
-  console.log("Server running on http://0.0.0.0:5000");
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Server running @ ${BACKEND_URL}`);
+  console.log(`Connected to MONGODB`);
 });
+
+// httpServer.listen(PORT, "0.0.0.0", () => {
+//   console.log("Server running on http://0.0.0.0:5000");
+// });
