@@ -13,6 +13,17 @@ Built completely from scratch, focusing on real-world chat system challenges lik
 ## Prototype Demo 
 https://commune-beta.vercel.app
 
+## Documentation
+
+Written retrospectively as an engineering record of this codebase — architecture, data model, and
+the API surface. Nothing in `src/` was changed in the process.
+
+| Doc | What's in it |
+|---|---|
+| [`docs/deep-dive.html`](docs/deep-dive.html) | Full HLD/LLD walkthrough — the two-transport realtime split, the message pipeline, cursor pagination, the `DeletedChat` watermark, WebRTC signalling, and a "what I'd do differently" section. Open in a browser. |
+| [`docs/api-contract.md`](docs/api-contract.md) | Every REST endpoint, auth requirements, and the pagination contract. |
+| [`docs/db-schema.md`](docs/db-schema.md) | The seven Prisma models, their relations, and the indexes that are missing. |
+
 ## Tech Stack
 - FrontEnd: React, Vite, Tailwind CSS, Typescript, React Query
 - BackEnd: Node Js, Express, Prisma, MongoDB, Web Sockets, WebRTC
