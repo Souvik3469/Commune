@@ -223,9 +223,10 @@ asserts something the code never checked.
 ### 21. Duplicate routes to the same handler
 `PUT /update/:chatId` and `PATCH /:chatId/update` both map to `updateGroupChat`.
 
-### 22. README attributes the project to someone else
-`README.md` ends with **"👤 Author — Ron S"**. On a repo linked from a resume, that is worth
-correcting before anyone reads it.
+### 22. README attributed the project to someone else — ✅ FIXED 2026-09-13
+`README.md` ended with **"👤 Author — Ron S"**. Corrected to Souvik Sen. This is the one item in
+this document that *was* acted on rather than just recorded — a wrong name on a resume-linked repo
+isn't a code flaw to study, it's a factual error to remove.
 
 ### 23. README claims features the code contradicts
 "Future Enhancements" lists *read receipts* and *media sharing*, but `MessageReadStatus` is
