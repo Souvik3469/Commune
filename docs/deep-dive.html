@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commune — Full-Stack Deep Dive (HLD / LLD / Intuition)</title>
+<style>
+  :root {
+    --bg: #0f1117; --bg-alt: #161925; --panel: #1a1e2b; --border: #2a2f40;
+    --text: #dbe1ee; --text-dim: #8b93a7; --accent: #7aa2ff; --accent2: #c792ea;
+    --good: #4fd1a5; --warn: #f0b74e; --bad: #ff7a85; --code-bg: #10131c;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --maxw: 980px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.6; }
+  body { display:flex; min-height:100vh; }
+  nav.toc { position:sticky; top:0; align-self:flex-start; width:280px; min-width:280px; height:100vh;
+    overflow-y:auto; background:var(--bg-alt); border-right:1px solid var(--border); padding:20px 16px 60px; }
+  nav.toc .brand { font-weight:700; font-size:1.1rem; color:var(--accent); margin-bottom:4px; }
+  nav.toc .brand-sub { font-size:.78rem; color:var(--text-dim); margin-bottom:18px; }
+  nav.toc a { display:block; color:var(--text-dim); text-decoration:none; font-size:.84rem; padding:3px 0 3px 10px; border-left:2px solid transparent; }
+  nav.toc a:hover { color:var(--accent); border-left-color:var(--accent); }
+  nav.toc .lvl1 { font-weight:700; color:var(--text); margin-top:14px; font-size:.9rem; padding-left:0; border-left:none; }
+  nav.toc .lvl1:first-child { margin-top:0; }
+  main { flex:1; min-width:0; padding:40px clamp(20px,5vw,70px) 120px; }
+  .wrap { max-width:var(--maxw); margin:0 auto; }
+  h1 { font-size:2rem; color:#fff; margin-bottom:.2em; }
+  h1 .sub { display:block; font-size:1rem; font-weight:400; color:var(--text-dim); margin-top:6px; }
+  h2 { font-size:1.5rem; color:#fff; border-bottom:1px solid var(--border); padding-bottom:10px; margin-top:3.2em; scroll-margin-top:20px; }
+  h3 { font-size:1.18rem; color:var(--accent); margin-top:2.4em; scroll-margin-top:20px; }
+  h4 { font-size:1rem; color:var(--accent2); margin-top:1.8em; margin-bottom:.5em; }
+  a { color:var(--accent); }
+  code { font-family:var(--mono); background:var(--code-bg); padding:.1em .4em; border-radius:4px; font-size:.88em; color:#ffd479; border:1px solid var(--border); }
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:.84rem; }
+  pre code { border:none; background:none; padding:0; color:#cdd6e4; }
+  ul, ol { padding-left:1.4em; } li { margin-bottom:.35em; }
+  table { width:100%; border-collapse:collapse; margin:1em 0 1.6em; font-size:.9rem; }
+  th, td { border:1px solid var(--border); padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:var(--panel); color:#fff; }
+  .callout { border-left:3px solid var(--accent); background:var(--panel); padding:12px 16px; margin:1.4em 0; border-radius:0 6px 6px 0; }
+  .callout.warn { border-left-color:var(--warn); }
+  .callout.bad { border-left-color:var(--bad); }
+  .callout.good { border-left-color:var(--good); }
+  .callout .lbl { display:block; font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); margin-bottom:6px; }
+  .flow { font-family:var(--mono); font-size:.82rem; background:var(--code-bg); border:1px solid var(--border); border-radius:8px; padding:16px; white-space:pre; overflow-x:auto; color:#cdd6e4; }
+  @media (max-width: 900px) { body { display:block; } nav.toc { position:static; width:auto; min-width:0; height:auto; border-right:none; border-bottom:1px solid var(--border); } }
+</style>
+</head>
+<body>
+<nav class="toc">
+  <div class="brand">Commune</div>
+  <div class="brand-sub">Full-Stack Deep Dive</div>
+  <a class="lvl1" href="#overview">0. System Overview</a>
+  <a href="#map">Repo map</a>
+  <a href="#transports">The two-transport split</a>
+  <a href="#authmodel">Auth model</a>
+  <a class="lvl1" href="#bootstrap">1. Backend Bootstrap</a>
+  <a href="#cors">CORS, twice</a>
+  <a href="#mw">Middleware order</a>
+  <a class="lvl1" href="#auth">2. Authentication</a>
+  <a href="#jwt">JWT + middleware</a>
+  <a href="#oauth">Google OAuth &amp; OTP</a>
+  <a class="lvl1" href="#data">3. Data Model</a>
+  <a href="#relations">Relations</a>
+  <a href="#deleted">The DeletedChat watermark</a>
+  <a class="lvl1" href="#messaging">4. Messaging Pipeline</a>
+  <a href="#send">Send path</a>
+  <a href="#pagination">Cursor pagination</a>
+  <a href="#unread">Unread counting</a>
+  <a class="lvl1" href="#realtime">5. Realtime</a>
+  <a href="#webrtc">6. WebRTC Signalling</a>
+  <a class="lvl1" href="#groups">7. Groups &amp; Invites</a>
+  <a class="lvl1" href="#sandbox">8. Sandbox System</a>
+  <a class="lvl1" href="#frontend">9. Frontend</a>
+  <a class="lvl1" href="#different">10. What I'd Do Differently</a>
+</nav>
+<main><div class="wrap">
+
+<h1>Commune — Full-Stack Deep Dive
+  <span class="sub">Real-time chat: 1:1 and group messaging, WebRTC audio/video, cursor-paginated history</span>
+</h1>
+
+<div class="callout warn">
+  <span class="lbl">Read this first</span>
+  This document describes the codebase <strong>as it actually is</strong>, not as it ought to be. It
+  was written retrospectively, and nothing was fixed in the process. Where the implementation is
+  weak or wrong, it says so and links to <code>docs/flaws.md</code>, which carries the full audit.
+  The point is an honest account of a real project, including its mistakes.
+</div>
+
+<h2 id="overview">0. System Overview</h2>
+
+<p>Commune is a two-tier application: an Express backend over MongoDB (via Prisma) and a React +
+TypeScript single-page frontend. Users register, find each other, and exchange messages in 1:1 or
+group conversations. Conversations carry history that pages backwards on scroll, and any
+conversation can be escalated to an audio or video call over WebRTC.</p>
+
+<h3 id="map">Repo map</h3>
+<div class="flow">Commune/
+├── backend/
+│   ├── prisma/schema.prisma        MongoDB models via Prisma
+│   └── src/
+│       ├── app.js                  Express + Socket.IO server, WebRTC signalling
+│       ├── prisma/index.js         shared Prisma client (see flaws #7)
+│       └── v1/
+│           ├── routes/             Auth, Chat, User
+│           ├── controllers/
+│           │   ├── auth/           local auth, Google OAuth, passport
+│           │   ├── chat/chat.js    ~900 lines: the whole messaging domain
+│           │   └── user/
+│           ├── middlewares/        Auth.middleware.js, upload.js (multer)
+│           ├── services/           EmailService
+│           ├── cron/               sandboxReset.cron.js
+│           ├── jobs/ scripts/      sandbox backup + restore
+│           └── utils/              cloudinary, sendEmail, InviteLink
+└── frontend/
+    └── src/
+        ├── api/                    axios instance + endpoint wrappers
+        ├── hooks/                  React Query hooks per domain
+        ├── context/                CallContext, ThemeContext
+        ├── components/             ~22 components, chat UI + call UI
+        └── lib/socket.ts           Socket.IO singleton</div>
+
+<h3 id="transports">The two-transport split — the defining architectural fact</h3>
+
+<p>Commune runs <strong>two independent realtime systems at once</strong>, split by feature:</p>
+
+<table>
+<tr><th>Concern</th><th>Transport</th><th>Where</th></tr>
+<tr><td>Message fan-out</td><td><strong>Ably</strong> (hosted pub/sub)</td><td><code>chat.js</code> publishes to channel <code>chat-{chatId}</code></td></tr>
+<tr><td>Call signalling, presence, typing</td><td><strong>Socket.IO</strong> (self-hosted)</td><td><code>app.js</code>, rooms <code>user-{id}</code> and <code>{roomId}</code></td></tr>
+</table>
+
+<p>Both are dependencies of both tiers — the frontend ships <code>ably</code> <em>and</em>
+<code>socket.io-client</code>; the backend ships both server SDKs.</p>
+
+<div class="callout bad">
+  <span class="lbl">Honest assessment</span>
+  There is no good reason for this. Socket.IO was already running, already had room semantics, and
+  could have carried messages. Ably adds a paid vendor, a second reconnection path on the client, a
+  second failure mode, and splits ordering guarantees across two systems that know nothing about
+  each other. It reads as an incremental decision — Socket.IO for calls first, Ably reached for
+  later when messaging needed fan-out — rather than a designed one. See <code>flaws.md</code> #8.
+</div>
+
+<h3 id="authmodel">Auth model</h3>
+<p>JWT bearer tokens on HTTP, verified per request by <code>Auth.middleware.js</code>. Every chat
+route sits behind it, and authorization (chat membership, group-admin rights) is checked inside the
+controllers rather than at the route layer.</p>
+
+<div class="callout bad">
+  <span class="lbl">The asymmetry that matters</span>
+  The HTTP layer is consistently guarded. <strong>The socket layer is not guarded at all</strong> —
+  it accepts a client-supplied <code>userId</code> and joins that user's private room on request.
+  So the same application enforces identity rigorously over REST and not at all over WebSocket.
+  This is the single most important thing to understand about the security posture here, and it is
+  flaws.md #1 and #2.
+</div>
+
+<h2 id="bootstrap">1. Backend Bootstrap</h2>
+
+<p><code>src/app.js</code> constructs the Express app, wraps it in an <code>http.Server</code>, and
+attaches Socket.IO to the same server so HTTP and WebSocket share a port.</p>
+
+<h3 id="cors">CORS is configured twice, differently</h3>
+<pre><code>const corsOrigins = type === "dev" ? devOrigins : prodOrigins;
+app.use(cors({ origin: (origin, cb) => { /* allow-list check */ }, credentials: true }));
+
+const io = new Server(httpServer, { cors: { origin: "*", credentials: true } });</code></pre>
+
+<p>Express gets a strict env-driven allow-list. Socket.IO gets <code>"*"</code>. The allow-list is
+also built from six discrete env vars (<code>DEV_URL1..3</code>, <code>PROD_URL1..3</code>), so
+unset ones land in the array as <code>undefined</code>.</p>
+
+<h3 id="mw">Middleware order</h3>
+<p><code>helmet</code> → <code>morgan</code> → body parsers → <code>express-session</code> →
+Passport → a global rate limiter → routes → 404 → error handler.</p>
+
+<p>Two things are worth noticing. The session secret is the literal string <code>"commune"</code>,
+committed. And the rate limiter is global at 1000 requests per 15 minutes, so login and OTP
+verification share a budget with message fetching — which is to say they are not meaningfully rate
+limited at all.</p>
+
+<h2 id="auth">2. Authentication</h2>
+
+<h3 id="jwt">JWT + middleware</h3>
+<pre><code>const decoded = jwt.verify(token, process.env.USER_ACCESS_SECRET);
+user = await prisma.user.findUnique({ where: { id: decoded } });
+if (!user) return res.status(401)...
+req.user = user;</code></pre>
+
+<p>The token payload <em>is</em> the user id — signed as a bare string rather than a claims object.
+It works, but it means there is nowhere to put <code>exp</code>, <code>iat</code>, roles, or a token
+version, so revocation is impossible and expiry depends entirely on how the token was signed.</p>
+
+<p>Every authenticated request costs a database round-trip to load the full user. That's a
+reasonable trade for correctness (a deleted user is rejected immediately), and it is the kind of
+thing you would cache later rather than design away now.</p>
+
+<h3 id="oauth">Google OAuth and OTP</h3>
+<p>Passport handles the Google strategy (<code>controllers/auth/googleAuth.js</code>,
+<code>passport.js</code>); <code>express-session</code> exists essentially to support that flow.
+A separate <code>Otp</code> model backs email verification and password reset, with codes emailed
+through <code>EmailService</code>. The <code>Otp</code> model has a <code>createdAt</code> but no
+expiry column and no TTL index — expiry is enforced in application code if at all.</p>
+
+<h2 id="data">3. Data Model</h2>
+
+<p>Prisma over MongoDB. Seven models: <code>User</code>, <code>Chat</code>, <code>Message</code>,
+<code>MessageReadStatus</code>, <code>DeletedChat</code>, <code>InviteToken</code>,
+<code>Otp</code>.</p>
+
+<h3 id="relations">Relations</h3>
+<p>Membership is a MongoDB-style many-to-many with explicit id arrays on both sides —
+<code>User.chatIds[]</code> and <code>Chat.userIds[]</code>. Group admin is a separate single
+relation (<code>Chat.adminId</code> → <code>User</code>, named <code>"GroupChats"</code>), so a
+group has exactly one admin and it is a hard foreign key rather than a role table.</p>
+
+<p><code>Chat</code> also carries <code>messagesIds[]</code> alongside the
+<code>Message.chatId</code> back-reference — the relationship is materialised in both directions,
+which means both can drift.</p>
+
+<div class="callout warn">
+  <span class="lbl">Missing</span>
+  The schema declares <strong>no indexes at all</strong>. The hottest query in the product —
+  messages for a chat, ordered by timestamp descending — has no supporting index. See flaws.md #5.
+</div>
+
+<h3 id="deleted">The DeletedChat watermark — the best idea in the codebase</h3>
+
+<p>"Delete chat" in a two-party conversation is a genuinely awkward product problem: it must remove
+the conversation for you without destroying it for the other person, and it has to behave sensibly
+if the conversation later resumes.</p>
+
+<p>Commune solves it with a per-user watermark rather than a flag or a soft-delete column:</p>
+
+<pre><code>model DeletedChat {
+  userId    String
+  chatId    String
+  deletedAt DateTime
+  @@unique([userId, chatId])
+}</code></pre>
+
+<p>Deleting upserts <code>deletedAt = now()</code>. Reading filters messages to
+<code>timestamp > deletedAt</code>. The other party is untouched. If the conversation resumes, old
+messages stay hidden for the deleter while new ones appear normally — no resurrection of history
+they intended to clear.</p>
+
+<div class="callout good">
+  <span class="lbl">Why this is the right shape</span>
+  A boolean <code>isDeleted</code> would have forced a choice between destroying shared history and
+  leaving the chat visible. A per-message per-user tombstone would be correct but costs a row per
+  message per user. The watermark gets the same semantics in one row per user per chat, and reading
+  it is a single indexed lookup. This is the part of the project worth talking about in an
+  interview.
+</div>
+
+<h2 id="messaging">4. Messaging Pipeline</h2>
+
+<h3 id="send">Send path — <code>POST /v1/chat/send</code></h3>
+<div class="flow">client
+  │ POST /v1/chat/send { content, chatId, type, fileUrl }
+  ▼
+authMiddleware ── verify JWT, load user
+  ▼
+createMessage
+  ├─ load chat + users
+  ├─ 403 unless sender ∈ chat.users          ← authorization, correctly enforced
+  ├─ if fileUrl: append to content as text   ← flaws.md #16
+  ├─ prisma.message.create()
+  ├─ ably.publish("chat-{chatId}", message)  ← realtime BEFORE remaining writes
+  ├─ prisma.chat.update({ lastModified })
+  └─ prisma.messageReadStatus.createMany({ ...sender, readAt: now })
+  ▼
+200 + message</div>
+
+<p>Membership is checked properly. The ordering is the problem: the message is broadcast to
+subscribers <em>before</em> <code>lastModified</code> is updated and before the read-status row is
+written, and none of the four steps share a transaction. A crash between them leaves recipients
+holding a message the chat list doesn't know about.</p>
+
+<h3 id="pagination">Cursor pagination — <code>GET /v1/chat/:chatId/messages</code></h3>
+
+<p>History pages backwards with a timestamp cursor, 20 at a time, using the fetch-one-extra trick to
+decide <code>hasMore</code> without a second count query:</p>
+
+<pre><code>take: limit + 1,
+orderBy: { timestamp: "desc" }
+...
+const hasMore = messages.length > limit;
+const messagesToReturn = hasMore ? messages.slice(0, limit) : messages;
+return { messages: messagesToReturn, nextCursor: hasMore ? last.timestamp : null };</code></pre>
+
+<p>Choosing cursor over offset pagination is correct and deliberate: offset pagination in a live
+message list skips or repeats rows whenever a message arrives mid-scroll. Two caveats — the cursor
+is a <em>timestamp</em>, which isn't unique under concurrent sends (flaws.md #12), and the
+<code>where</code> clause is assembled by two object spreads that both write the same
+<code>timestamp</code> key (flaws.md #13).</p>
+
+<p>The deleted-chat watermark composes into the same query, so a user who cleared a conversation
+pages through only what came after.</p>
+
+<h3 id="unread">Unread counting</h3>
+<p>Read state is <em>sparse</em>: a <code>MessageReadStatus</code> row exists only once a user has
+read a message, and absence means unread. That's an efficient representation. The query built on
+top of it is not:</p>
+
+<pre><code>const unreadMessages = await prisma.message.findMany({ where: {...}, select: { id: true } });
+res.json(unreadMessages.length);</code></pre>
+
+<p>Every unread row is fetched purely to be counted, with no upper bound. This should be
+<code>count()</code>. See flaws.md #6.</p>
+
+<h2 id="realtime">5. Realtime</h2>
+
+<p>Message delivery rides Ably channels named <code>chat-{chatId}</code>; the client subscribes per
+open conversation. Calls, typing indicators and per-user notification routing ride Socket.IO, with
+two room conventions:</p>
+
+<table>
+<tr><th>Room</th><th>Joined by</th><th>Used for</th></tr>
+<tr><td><code>user-{userId}</code></td><td><code>register</code> event</td><td>directed events — incoming calls</td></tr>
+<tr><td><code>{roomId}</code></td><td><code>join</code> event</td><td>conversation-scoped broadcast</td></tr>
+</table>
+
+<p>Neither event is authenticated, and <code>join</code> performs no membership check. There is also
+no <code>disconnect</code> handler — Socket.IO leaves rooms automatically, but no application-level
+presence state is reconciled.</p>
+
+<h2 id="webrtc">6. WebRTC Signalling</h2>
+
+<p>The server is a pure relay — it never touches media, only forwards SDP and ICE between peers.
+Four events: <code>offer</code>, <code>answer</code>, <code>candidate</code>,
+<code>end-call</code>. Each supports two addressing modes: <code>to</code> (a specific user, for
+1:1) or <code>roomId</code> (everyone else in the conversation, for group calls).</p>
+
+<div class="flow">A                         server                        B
+│ offer {to: B, from: A}    │                             │
+├──────────────────────────►│ emit → room user-B ─────────►│
+│                           │                             │ answer {to: A}
+│◄───────────────── emit → room user-A ◄───────────────────┤
+│ candidate (trickle ICE, both directions, relayed)        │
+│◄────────────────────────►│◄───────────────────────────►│
+│                     P2P media established                │</div>
+
+<div class="callout bad">
+  <span class="lbl">Inconsistent trust</span>
+  <code>candidate</code> derives the sender from <code>socket.data.userId</code> — the server's own
+  view. <code>offer</code>, <code>answer</code> and <code>end-call</code> take <code>from</code>
+  straight from the client payload, along with <code>callerName</code> and
+  <code>callerAvatar</code>. So identity is server-derived in one handler and client-asserted in
+  three, in the same file. Caller identity is therefore spoofable. flaws.md #2.
+</div>
+
+<h2 id="groups">7. Groups &amp; Invites</h2>
+
+<p>Group operations are admin-gated in the controller: <code>updateGroupChat</code> and
+<code>removeGroupMembers</code> both compare <code>chat.adminId</code> to the caller and return 403
+otherwise.</p>
+
+<p>Joining works through <code>InviteToken</code> — a unique token row with an
+<code>expiresAt</code>, generated by <code>generateInvite</code> and consumed by
+<code>acceptInviteLink</code>, which checks expiry and whether the user is already a member before
+connecting them to the chat.</p>
+
+<p>One product hole: <code>deleteChat</code> explicitly forbids the admin from deleting the group,
+and non-admins only disconnect themselves. So the only person with authority over a group is the
+only one who cannot remove it, and an abandoned group is permanent. flaws.md #15.</p>
+
+<h2 id="sandbox">8. Sandbox System</h2>
+
+<p>An unusually product-minded piece of engineering for a portfolio project. Five fixed demo
+accounts (<code>user1@gmail.com</code> … <code>user5@gmail.com</code>) let a stranger try the full
+app — groups, calls, history — without signing up.</p>
+
+<div class="flow">scripts/sandboxBackup.js   → snapshot demo users + chats → sandbox_backup.json
+cron/sandboxReset.cron.js  → nightly 00:00 IST
+jobs/resetSandbox.js       → wipe demo-account data, restore from snapshot</div>
+
+<p>Removing the signup barrier is exactly the right instinct for a project whose entire purpose is
+being clicked by a stranger who owes you nothing.</p>
+
+<h2 id="frontend">9. Frontend</h2>
+
+<p>React 18 + TypeScript + Vite, Tailwind, React Router 7. Server state is React Query; client state
+is Context.</p>
+
+<table>
+<tr><th>Layer</th><th>Contents</th></tr>
+<tr><td><code>api/</code></td><td>A shared axios instance plus thin per-domain wrappers (auth, chat, message, user)</td></tr>
+<tr><td><code>hooks/</code></td><td>React Query hooks per domain — the only place components touch the network</td></tr>
+<tr><td><code>context/</code></td><td><code>CallContext</code> (global call state, so a call survives navigation), <code>ThemeContext</code></td></tr>
+<tr><td><code>lib/socket.ts</code></td><td>Lazily-created Socket.IO singleton, <code>autoConnect: false</code>, websocket transport only</td></tr>
+</table>
+
+<p>Hoisting call state into a context rather than the chat screen is the right call — an incoming
+call has to be answerable from anywhere in the app, which is why <code>GlobalCallUI</code> and
+<code>IncomingCallPopup</code> live above the router's content.</p>
+
+<p>The component layer is flat: ~22 components in one directory, several of which
+(<code>Chat</code>, <code>ChatArea</code>, <code>ChatBox</code>, <code>ChatSection</code>,
+<code>ChatBar</code>, <code>ChatRow</code>) have names that don't disambiguate their roles.</p>
+
+<h2 id="different">10. What I'd Do Differently</h2>
+
+<p>Written as an engineer reviewing their own older work, in order of how much it would matter.</p>
+
+<ol>
+<li><strong>Authenticate the socket handshake.</strong> One <code>io.use()</code> middleware
+verifying the same JWT the HTTP layer already verifies, with <code>userId</code> derived from the
+token and never from a payload. This single change closes the largest hole in the system, and the
+fact that HTTP got this right while WebSocket got no treatment at all is the clearest sign the two
+were built at different times with different care.</li>
+
+<li><strong>Collapse to one realtime transport.</strong> Socket.IO was already there. Ably solves a
+problem that had already been solved in the same codebase, and the cost is a vendor, a second client
+runtime, and split ordering guarantees.</li>
+
+<li><strong>Index the schema before writing the queries.</strong> A chat app whose primary query is
+"last N messages in this conversation" needs a compound index on <code>(chatId, timestamp)</code>
+before it needs anything else. Building cursor pagination carefully and then leaving the underlying
+query unindexed is optimising the wrong layer.</li>
+
+<li><strong>Make the write path transactional, and publish after commit.</strong> Broadcasting before
+the durable writes complete inverts the correct order.</li>
+
+<li><strong>Model attachments properly.</strong> Concatenating a file URL onto message text makes
+attachments unqueryable forever. The <code>type</code> column already existed to carry this.</li>
+
+<li><strong>Prune the dependency list, and find out why <code>socket-io</code> is in it.</strong>
+A typosquat-shaped package name sitting next to the real one in a lockfile is worth understanding,
+not just deleting.</li>
+
+<li><strong>Split <code>chat.js</code>.</strong> Nine hundred lines covering chats, messages, read
+state, groups, and invites is four modules wearing one filename.</li>
+</ol>
+
+<div class="callout">
+  <span class="lbl">Calibration</span>
+  The things this project got right are not accidental: the <code>DeletedChat</code> watermark is a
+  genuinely good piece of modelling, cursor pagination was the correct choice over offset, HTTP
+  authorization is enforced consistently, and the sandbox system shows product thinking most
+  portfolio projects never reach. The failures cluster in one place — everything that arrived later
+  and was bolted onto the side, which is the socket layer and the second realtime vendor. That is a
+  useful pattern to recognise in one's own work.
+</div>
+
+</div></main>
+</body>
+</html>
