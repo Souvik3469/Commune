@@ -23,8 +23,7 @@ call signalling over Socket.IO — see `deep-dive.html` §5 and §6.
 Google OAuth is handled separately through Passport (`controllers/auth/googleAuth.js`) rather than
 these routes.
 
-⚠️ None of these have a dedicated rate limit — only the global 1000/15min limiter applies. See
-`flaws.md` #10.
+⚠️ None of these have a dedicated rate limit — only the global 1000/15min limiter applies.
 
 ## Users — `/v1/user`
 
@@ -46,9 +45,9 @@ these routes.
 | GET | `/get-chats` | 🔒 | chat list, with last message |
 | GET | `/get-rooms` | 🔒 | |
 | GET | `/:chatId` | 🔒 | single chat; **registered last** so it doesn't shadow the static paths above |
-| PUT | `/update/:chatId` | 🔒 | admin-only. **Duplicate of the PATCH below** — `flaws.md` #21 |
+| PUT | `/update/:chatId` | 🔒 | admin-only. **Duplicate of the PATCH below** |
 | PATCH | `/:chatId/update` | 🔒 | admin-only, same handler |
-| DELETE | `/:chatId` | 🔒 | 1:1 → `DeletedChat` watermark. Group → leave. Admin → **403, cannot delete** (`flaws.md` #15) |
+| DELETE | `/:chatId` | 🔒 | 1:1 → `DeletedChat` watermark. Group → leave. Admin → **403, cannot delete** () |
 | PATCH | `/:chatId/remove-members` | 🔒 | admin-only |
 | POST | `/:chatId/invite-link` | 🔒 | creates an `InviteToken` with `expiresAt` |
 | POST | `/accept-invite/:inviteToken` | 🔒 | checks expiry + existing membership |
@@ -73,11 +72,10 @@ GET /v1/chat/:chatId/messages?cursor=2026-01-04T10:33:12.004Z
 - 404 if the chat doesn't exist **or** the caller isn't a member (deliberately indistinguishable).
 - Filtered by the caller's `DeletedChat.deletedAt` watermark when one exists.
 - Fetches `limit + 1` to derive `hasMore` without a second count query.
-- ⚠️ Cursor is a timestamp, which is not unique under concurrent sends — `flaws.md` #12.
-- ⚠️ Response embeds the full `chat` object on every message — `flaws.md` #11.
+- ⚠️ Cursor is a timestamp, which is not unique under concurrent sends
+- ⚠️ Response embeds the full `chat` object on every message
 
 ## Error shape
 
 No envelope. Handlers return ad-hoc JSON — `{ error }` in some places, `{ message }` in others, and
 the global handler emits `{ status, message }` with the raw `err.message`. Worth standardising;
-see `flaws.md` #19.

@@ -130,7 +130,6 @@ model, and an audit of what's wrong with it. Nothing was fixed in the process.
 | Doc | What's in it |
 |---|---|
 | [`docs/deep-dive.html`](docs/deep-dive.html) | Full HLD/LLD walkthrough — the two-transport realtime split, the message pipeline, cursor pagination, the `DeletedChat` watermark, WebRTC signalling, and a "what I'd do differently" section. Open in a browser. |
-| [`docs/flaws.md`](docs/flaws.md) | Known flaws, severity-ordered — security, correctness, performance, hygiene. Documented, **not fixed**. |
 | [`docs/api-contract.md`](docs/api-contract.md) | Every REST endpoint, auth requirements, and the pagination contract. |
 | [`docs/db-schema.md`](docs/db-schema.md) | The seven Prisma models, their relations, and the indexes that are missing. |
 
