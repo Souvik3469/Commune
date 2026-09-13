@@ -86,8 +86,7 @@
   <span class="lbl">Read this first</span>
   This document describes the codebase <strong>as it actually is</strong>, not as it ought to be. It
   was written retrospectively, and nothing was fixed in the process. Where the implementation is
-  weak or wrong, it says so and links to <code>docs/flaws.md</code>, which carries the full audit.
-  The point is an honest account of a real project, including its mistakes.
+  weak or wrong, it says so and says so plainly. The point is an honest account of a real project, including its mistakes.
 </div>
 
 <h2 id="overview">0. System Overview</h2>
@@ -103,7 +102,7 @@ conversation can be escalated to an audio or video call over WebRTC.</p>
 │   ├── prisma/schema.prisma        MongoDB models via Prisma
 │   └── src/
 │       ├── app.js                  Express + Socket.IO server, WebRTC signalling
-│       ├── prisma/index.js         shared Prisma client (see flaws #7)
+│       ├── prisma/index.js         shared Prisma client (bypassed in chat.js)
 │       └── v1/
 │           ├── routes/             Auth, Chat, User
 │           ├── controllers/
@@ -142,7 +141,7 @@ conversation can be escalated to an audio or video call over WebRTC.</p>
   could have carried messages. Ably adds a paid vendor, a second reconnection path on the client, a
   second failure mode, and splits ordering guarantees across two systems that know nothing about
   each other. It reads as an incremental decision — Socket.IO for calls first, Ably reached for
-  later when messaging needed fan-out — rather than a designed one. See <code>flaws.md</code> #8.
+  later when messaging needed fan-out — rather than a designed one.
 </div>
 
 <h3 id="authmodel">Auth model</h3>
@@ -155,8 +154,7 @@ controllers rather than at the route layer.</p>
   The HTTP layer is consistently guarded. <strong>The socket layer is not guarded at all</strong> —
   it accepts a client-supplied <code>userId</code> and joins that user's private room on request.
   So the same application enforces identity rigorously over REST and not at all over WebSocket.
-  This is the single most important thing to understand about the security posture here, and it is
-  flaws.md #1 and #2.
+  This is the single most important thing to understand about the security posture here.
 </div>
 
 <h2 id="bootstrap">1. Backend Bootstrap</h2>
@@ -225,7 +223,7 @@ which means both can drift.</p>
 <div class="callout warn">
   <span class="lbl">Missing</span>
   The schema declares <strong>no indexes at all</strong>. The hottest query in the product —
-  messages for a chat, ordered by timestamp descending — has no supporting index. See flaws.md #5.
+  messages for a chat, ordered by timestamp descending — has no supporting index.
 </div>
 
 <h3 id="deleted">The DeletedChat watermark — the best idea in the codebase</h3>
@@ -268,7 +266,7 @@ authMiddleware ── verify JWT, load user
 createMessage
   ├─ load chat + users
   ├─ 403 unless sender ∈ chat.users          ← authorization, correctly enforced
-  ├─ if fileUrl: append to content as text   ← flaws.md #16
+  ├─ if fileUrl: append to content as text   ← attachments not modelled
   ├─ prisma.message.create()
   ├─ ably.publish("chat-{chatId}", message)  ← realtime BEFORE remaining writes
   ├─ prisma.chat.update({ lastModified })
@@ -295,9 +293,9 @@ return { messages: messagesToReturn, nextCursor: hasMore ? last.timestamp : null
 
 <p>Choosing cursor over offset pagination is correct and deliberate: offset pagination in a live
 message list skips or repeats rows whenever a message arrives mid-scroll. Two caveats — the cursor
-is a <em>timestamp</em>, which isn't unique under concurrent sends (flaws.md #12), and the
+is a <em>timestamp</em>, which isn't unique under concurrent sends, and the
 <code>where</code> clause is assembled by two object spreads that both write the same
-<code>timestamp</code> key (flaws.md #13).</p>
+<code>timestamp</code> key — currently correct only by accident of ordering.</p>
 
 <p>The deleted-chat watermark composes into the same query, so a user who cleared a conversation
 pages through only what came after.</p>
@@ -311,7 +309,7 @@ top of it is not:</p>
 res.json(unreadMessages.length);</code></pre>
 
 <p>Every unread row is fetched purely to be counted, with no upper bound. This should be
-<code>count()</code>. See flaws.md #6.</p>
+<code>count()</code>.</p>
 
 <h2 id="realtime">5. Realtime</h2>
 
@@ -351,7 +349,7 @@ Four events: <code>offer</code>, <code>answer</code>, <code>candidate</code>,
   view. <code>offer</code>, <code>answer</code> and <code>end-call</code> take <code>from</code>
   straight from the client payload, along with <code>callerName</code> and
   <code>callerAvatar</code>. So identity is server-derived in one handler and client-asserted in
-  three, in the same file. Caller identity is therefore spoofable. flaws.md #2.
+  three, in the same file. Caller identity is therefore spoofable.
 </div>
 
 <h2 id="groups">7. Groups &amp; Invites</h2>
@@ -367,7 +365,7 @@ connecting them to the chat.</p>
 
 <p>One product hole: <code>deleteChat</code> explicitly forbids the admin from deleting the group,
 and non-admins only disconnect themselves. So the only person with authority over a group is the
-only one who cannot remove it, and an abandoned group is permanent. flaws.md #15.</p>
+only one who cannot remove it, and an abandoned group is permanent.</p>
 
 <h2 id="sandbox">8. Sandbox System</h2>
 

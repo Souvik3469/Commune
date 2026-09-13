@@ -36,17 +36,17 @@ One model for both 1:1 and group, discriminated by `isGroup`.
 with both sender and chat.
 
 ⚠️ File attachments are **not** modelled — `createMessage` appends the URL onto `content` as text.
-The `type` column exists and would have carried this. `flaws.md` #16.
+The `type` column exists and would have carried this.
 
 ### `MessageReadStatus`
 `(messageId, userId, readAt)`. Read state is **sparse** — a row exists only once read, so absence
-means unread. Efficient representation; the query built on it is not (`flaws.md` #6).
+means unread. Efficient representation; the query built on it is not ().
 
 Not declared unique on `(messageId, userId)`, so duplicate rows are possible.
 
 ### `DeletedChat`
 The per-user deletion watermark. `@@unique([userId, chatId])`, with `deletedAt` as the cutoff.
-Reads filter to `timestamp > deletedAt`. This is the best-designed piece of the schema — see
+Reads filter to `timestamp > deletedAt`. This is the best-designed piece of the schema — 
 `deep-dive.html` §3 for why.
 
 ### `InviteToken`
@@ -73,5 +73,5 @@ The queries that need them:
 | Chat list ordering | `Chat @@index([lastModified])` |
 | OTP cleanup | `Otp` TTL index on `createdAt` |
 
-This is `flaws.md` #5, and it is the difference between a chat app that demos well and one that
+This is, and it is the difference between a chat app that demos well and one that
 stays usable at volume.
