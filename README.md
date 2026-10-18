@@ -15,14 +15,27 @@ https://commune-beta.vercel.app
 
 ## Documentation
 
-Written retrospectively as an engineering record of this codebase — architecture, data model, and
-the API surface. Nothing in `src/` was changed in the process.
+An engineering record of this codebase — architecture, data model and API surface — in two layers.
+The **current** documents describe the system as it stands. The **historical** ones describe it as
+it was originally built, including the reasoning behind choices that have since changed, and are
+kept deliberately rather than overwritten.
+
+**Current**
 
 | Doc | What's in it |
 |---|---|
-| [`docs/deep-dive.html`](docs/deep-dive.html) | Full HLD/LLD walkthrough — the two-transport realtime split, the message pipeline, cursor pagination, the `DeletedChat` watermark, WebRTC signalling, and a "what I'd do differently" section. Open in a browser. |
-| [`docs/api-contract.md`](docs/api-contract.md) | Every REST endpoint, auth requirements, and the pagination contract. |
-| [`docs/db-schema.md`](docs/db-schema.md) | The seven Prisma models, their relations, and the indexes that are missing. |
+| [`docs/architecture-v2.md`](docs/architecture-v2.md) | Current HLD/LLD: the single authenticated Socket.IO transport, the transactional message pipeline, the compound cursor, indexing, the auth model, and what the October 2026 correctness pass changed and why. |
+| [`docs/api-contract-v2.md`](docs/api-contract-v2.md) | Current REST and socket contract, with breaking changes marked. |
+| [`docs/db-schema-v2.md`](docs/db-schema-v2.md) | Current schema, its indexes, and the constraints added. |
+| [`docs/migration-notes.md`](docs/migration-notes.md) | What has to happen to a live database and environment before deploying. |
+
+**Historical — the system as originally built**
+
+| Doc | What's in it |
+|---|---|
+| [`docs/deep-dive.html`](docs/deep-dive.html) | The original HLD/LLD walkthrough — the two-transport realtime split, the message pipeline, cursor pagination, the `DeletedChat` watermark, WebRTC signalling, and a "what I'd do differently" section. Open in a browser. |
+| [`docs/api-contract.md`](docs/api-contract.md) | The original REST contract. |
+| [`docs/db-schema.md`](docs/db-schema.md) | The original seven models, their relations, and the indexes that were missing. |
 
 ## Tech Stack
 - FrontEnd: React, Vite, Tailwind CSS, Typescript, React Query
