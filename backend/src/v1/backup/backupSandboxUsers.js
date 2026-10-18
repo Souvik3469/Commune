@@ -1,7 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import path from "path";
+import prisma from "../../prisma/index";
 import fs from "fs";
 
-const prisma = new PrismaClient();
+const BACKUP_FILE = path.resolve(__dirname, "../../../sandbox_backup.json");
+
 const SANDBOX_EMAILS = [
   "user1@gmail.com",
   "user2@gmail.com",
@@ -26,9 +28,21 @@ async function backup() {
     },
   });
 
-  fs.writeFileSync("sandbox_backup.json", JSON.stringify(users, null, 2));
+  fs.writeFileSync(BACKUP_FILE, JSON.stringify(users, null, 2));
   console.log("✅ Backup completed!");
   await prisma.$disconnect();
 }
 
-backup();
+// Runs only when executed directly, not on import.
+// Babel compiles this module to CommonJS, so `require.main` is the reliable
+// "am I the entry point" check here.
+if (require.main === module) {
+  backup()
+    .catch((err) => {
+      console.error(err);
+      process.exitCode = 1;
+    })
+    .finally(() => prisma.$disconnect());
+}
+
+export default backup;

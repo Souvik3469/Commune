@@ -1,12 +1,16 @@
-import { PrismaClient } from "@prisma/client";
+import path from "path";
+import prisma from "../../prisma/index";
 import fs from "fs";
 
-const prisma = new PrismaClient();
+// Resolved against the project root rather than the process working
+// directory, which varies between `npm run dev` and `npm start`.
+const BACKUP_FILE = path.resolve(__dirname, "../../../sandbox_backup.json");
+
 
 async function restore() {
   console.log("♻️ Resetting sandbox users only...");
 
-  const backup = JSON.parse(fs.readFileSync("sandbox_backup.json", "utf-8"));
+  const backup = JSON.parse(fs.readFileSync(BACKUP_FILE, "utf-8"));
 
   const sandboxEmails = backup.map((u) => u.email);
   const sandboxUserIds = backup.map((u) => u.id);
@@ -65,9 +69,25 @@ async function restore() {
   }
 
   console.log("✅ Sandbox users reset completed safely");
-  await prisma.$disconnect();
 }
 
-restore().catch(console.error);
+/**
+ * This module used to call `restore()` at module scope *and* export it. The
+ * cron module imports it, so every server boot silently wiped and recreated
+ * the sandbox accounts — and the `$disconnect()` that followed tore down the
+ * connection pool the API had just started with.
+ *
+ * It now runs only when executed directly as a script.
+ */
+// Babel compiles this module to CommonJS, so `require.main` is the reliable
+// "am I the entry point" check here.
+if (require.main === module) {
+  restore()
+    .catch((err) => {
+      console.error(err);
+      process.exitCode = 1;
+    })
+    .finally(() => prisma.$disconnect());
+}
 
 export default restore;
