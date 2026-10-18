@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { getSocket } from "../lib/socket";
+import { connectSocket, getSocket } from "../lib/socket";
 import type {
   AnswerPayload,
   CandidatePayload,
@@ -214,26 +214,27 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       dAvatar: string,
       otherUserId?: string | null
     ) => {
-      if (!socket.connected) socket.connect();
+      connectSocket();
       setRoomId(rId);
       setCurrentUserId(uId);
       setDisplayName(dName);
       setDisplayAvatar(dAvatar);
       setCurrentChatOtherUserId(otherUserId ?? null);
 
-      socket.emit("register", { userId: uId });
-      socket.emit("join", { roomId: rId, userId: uId });
+      // No `register` any more: the server derives this socket's identity from
+      // the handshake token, and verifies chat membership before admitting it
+      // to the room. It used to accept whatever userId arrived in the payload.
+      socket.emit("join", { roomId: rId });
     },
     [socket]
   );
 
   const leaveRoom = useCallback(() => {
-    if (roomId && currentUserId)
-      socket.emit("leave", { roomId, userId: currentUserId });
+    if (roomId) socket.emit("leave", { roomId });
     setRoomId(null);
     // setCurrentUserId(null);
     setCurrentChatOtherUserId(null);
-  }, [currentUserId, roomId, socket]);
+  }, [roomId, socket]);
 
   // Handle incoming signaling
   useEffect(() => {
@@ -310,32 +311,19 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [attachLocalPreview, attachRemoteToElements, inCall]);
 
-  const registerUser = useCallback(
-    (userId: string | null) => {
-      setCurrentUserId(userId);
-      if (!userId) return;
-      if (!socket.connected) socket.connect();
-      socket.emit("register", { userId });
-    },
-    [socket]
-  );
-
-  // 3) ensure we re-register on socket reconnect
-  useEffect(() => {
-    const onConnect = () => {
-      if (currentUserId) socket.emit("register", { userId: currentUserId });
-    };
-    socket.on("connect", onConnect);
-    return () => {
-      socket.off("connect", onConnect);
-    };
-  }, [socket, currentUserId]);
+  const registerUser = useCallback((userId: string | null) => {
+    setCurrentUserId(userId);
+    if (!userId) return;
+    // Connecting is enough — the handshake carries the token and the server
+    // joins this socket to `user:<id>` and to every chat it belongs to.
+    connectSocket();
+  }, []);
 
   // Caller
   const startCall = useCallback(
     async (video: boolean) => {
       if (!roomId || !currentUserId) return;
-      if (!socket.connected) socket.connect();
+      connectSocket();
 
       const pc = createPeerConnection();
       try {
@@ -356,14 +344,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       await pc.setLocalDescription(offer);
 
       remoteUserIdRef.current = currentChatOtherUserId;
+      // `from`, `callerName` and `callerAvatar` are no longer sent: the server
+      // stamps them from the authenticated socket, so a caller cannot present
+      // as somebody else.
       socket.emit("offer", {
         roomId,
-        from: currentUserId,
         offer,
         video,
         to: remoteUserIdRef.current ?? null,
-        callerName: displayName,
-        callerAvatar: displayAvatar,
       });
 
       setInCall(true);
@@ -374,8 +362,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       currentUserId,
       roomId,
       socket,
-      displayName,
-      displayAvatar,
     ]
   );
 
@@ -409,7 +395,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       // include `to` so backend forwards directly to caller (backend prefers `to`)
       socket.emit("answer", {
         roomId: roomId ?? null,
-        from: currentUserId,
         answer,
         to,
       });

@@ -2,7 +2,6 @@ import { FC, useEffect, useRef, useState } from "react";
 import { FaRegFaceSmile, FaMicrophone } from "react-icons/fa6";
 import { CgAttachment } from "react-icons/cg";
 import { RiSendPlaneFill } from "react-icons/ri";
-import Ably from "ably";
 import { useMyDetails } from "../hooks/userHooks";
 import { useSendMessage } from "../hooks/messageHooks";
 import Picker from "@emoji-mart/react";
@@ -10,8 +9,8 @@ import data from "@emoji-mart/data";
 import { useTheme } from "../context/ThemeContext";
 import { EmojiSelectEvent } from "../types/generic";
 import toast from "react-hot-toast";
+import { emitTyping } from "../hooks/realtimeHooks";
 
-const ably = new Ably.Realtime(import.meta.env.VITE_ABLY_API_KEY!);
 const TYPING_DELAY = 1000;
 const TYPING_REFRESH_INTERVAL = 1000;
 
@@ -28,7 +27,6 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
   const typingTimeout = useRef<NodeJS.Timeout | null>(null);
   const refreshTypingInterval = useRef<NodeJS.Timeout | null>(null);
   const isTyping = useRef(false);
-  const channelRef = useRef<ReturnType<typeof ably.channels.get> | null>(null);
 
   const { data: user } = useMyDetails();
   const { mutateAsync: sendMessage } = useSendMessage(() => {
@@ -37,15 +35,14 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
   const { isDarkMode } = useTheme();
 
   useEffect(() => {
-    const channel = ably.channels.get(`chat-${chatId}`);
-    channelRef.current = channel;
-
     return () => {
       if (typingTimeout.current) clearTimeout(typingTimeout.current);
       if (refreshTypingInterval.current)
         clearInterval(refreshTypingInterval.current);
+      // Tell the room we stopped: switching chats mid-keystroke used to leave
+      // a typing indicator stuck on the other side until it timed out.
+      if (isTyping.current) emitTyping(chatId, false);
       isTyping.current = false;
-      channelRef.current?.detach();
     };
   }, [chatId]);
 
@@ -55,13 +52,9 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
     setIsSending(true);
     try {
       await sendMessage({ chatId, content });
-      const channel = ably.channels.get(`chat-${chatId}`);
-      channel.publish("new-message", {
-        chatId,
-        content,
-        senderName: user?.name,
-        createdAt: new Date().toISOString(),
-      });
+      // The sidebar preview used to be driven by a message the *sender's*
+      // browser published, so a recipient's list never updated until reload.
+      // The server now fans the persisted message out to everyone in the room.
 
       setContent("");
       setShowEmojiPicker(false);
@@ -79,33 +72,22 @@ const MessageBox: FC<MessageBoxProps> = ({ chatId, scrollToBottom }) => {
   };
 
   const handleTyping = () => {
-    if (!channelRef.current || !user?.id) return;
+    if (!user?.id) return;
 
     if (!isTyping.current) {
       isTyping.current = true;
-      channelRef.current.publish("typing", {
-        typing: true,
-        userId: user.id,
-        userName: user.name,
-      });
+      emitTyping(chatId, true);
       refreshTypingInterval.current = setInterval(() => {
-        channelRef.current?.publish("typing", {
-          typing: true,
-          userId: user.id,
-          userName: user.name,
-        });
+        emitTyping(chatId, true);
       }, TYPING_REFRESH_INTERVAL);
     }
     if (typingTimeout.current) clearTimeout(typingTimeout.current);
     typingTimeout.current = setTimeout(() => {
       isTyping.current = false;
-      channelRef.current?.publish("typing", {
-        typing: false,
-        userId: user.id,
-        userName: user.name,
-      });
+      emitTyping(chatId, false);
       if (refreshTypingInterval.current) {
         clearInterval(refreshTypingInterval.current);
+        refreshTypingInterval.current = null;
       }
     }, TYPING_DELAY);
   };

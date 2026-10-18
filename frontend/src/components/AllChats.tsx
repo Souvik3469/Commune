@@ -2,7 +2,7 @@ import { IoSearch } from "react-icons/io5";
 import logo from "../assets/logo1.png";
 import ChatSection from "./ChatSection";
 import { FaPlus } from "react-icons/fa6";
-import { FC, useEffect, useMemo, useRef, useState } from "react";
+import { FC, useCallback, useMemo, useState } from "react";
 import {
   useAllChats,
   useCreateChat,
@@ -17,9 +17,12 @@ import {
   TransformedChat,
 } from "../types/chat";
 import { formatDistanceToNow } from "date-fns";
-import Ably from "ably";
-import type { Message as AblyMessage } from "ably";
 import { UserPreview } from "../types/user";
+import { MessageDetail } from "../types/message";
+import {
+  useChatMessages,
+  useRealtimeConnection,
+} from "../hooks/realtimeHooks";
 import toast from "react-hot-toast";
 
 const MAX_MSG_LENGTH = 30;
@@ -59,61 +62,28 @@ const AllChats: FC<AllChatsProps> = ({ className, setSelectedChat }) => {
   const [chatToViewMembers, setChatToViewMembers] =
     useState<ChatPreview | null>(null);
 
-  const ablyRef = useRef<Ably.Realtime | null>(null);
+  /**
+   * Live previews for every conversation in the list. This used to open one
+   * Ably connection, then a channel subscription per chat, and listened for a
+   * `new-message` event that only the *sending* browser ever published — so a
+   * recipient's sidebar never moved until they reloaded. The server now
+   * broadcasts each persisted message to the conversation's room, and the one
+   * authenticated socket already carries every room this user belongs to.
+   */
+  useRealtimeConnection(Boolean(user?.id));
 
-  useEffect(() => {
-    try {
-      ablyRef.current = new Ably.Realtime({
-        key: import.meta.env.VITE_ABLY_API_KEY!,
-        echoMessages: true,
-      });
-    } catch (err) {
-      console.error("Failed to initialize Ably:", err);
-      return;
-    }
+  const onMessage = useCallback((message: MessageDetail) => {
+    if (!message?.chatId || !message?.timestamp) return;
+    setUpdatedChats((prev) => ({
+      ...prev,
+      [message.chatId]: {
+        content: message.content,
+        timestamp: message.timestamp,
+      },
+    }));
+  }, []);
 
-    const ably = ablyRef.current!;
-    const allChats = [...oneToOneChats, ...groupChats];
-
-    allChats.forEach((chat) => {
-      try {
-        const channel = ably.channels.get(`chat-${chat.id}`);
-
-        channel.subscribe("new-message", (message: AblyMessage) => {
-          const data = message.data;
-          if (data?.content && data?.createdAt) {
-            setUpdatedChats((prev) => ({
-              ...prev,
-              [chat.id]: {
-                content: data.content,
-                timestamp: data.createdAt,
-              },
-            }));
-          }
-        });
-      } catch (err) {
-        console.error(`Error subscribing to chat-${chat.id}:`, err);
-      }
-    });
-
-    return () => {
-      allChats.forEach((chat) => {
-        try {
-          const channel = ably.channels.get(`chat-${chat.id}`);
-          channel.unsubscribe();
-          channel.detach();
-        } catch (err) {
-          console.error(`Error cleaning up chat-${chat.id} channel:`, err);
-        }
-      });
-
-      try {
-        ably.close();
-      } catch (err) {
-        console.error("Error closing Ably connection:", err);
-      }
-    };
-  }, [oneToOneChats, groupChats]);
+  useChatMessages(undefined, onMessage, Boolean(user?.id));
 
   const createOneToOneMutation = useCreateChat();
   const createGroupMutation = useCreateChat();

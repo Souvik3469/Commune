@@ -1,12 +1,15 @@
-import { FC, useEffect, useRef, useState } from "react";
-import Ably from "ably";
-import type { Message as AblyMessage } from "ably";
+import { FC, useCallback, useEffect, useRef, useState } from "react";
 import { useMyDetails } from "../hooks/userHooks";
 import { useChatById } from "../hooks/chatHooks";
 import { useQueryClient, InfiniteData } from "@tanstack/react-query";
 import { MessageDetail } from "../types/message";
 import { useMessages } from "../hooks/messageHooks";
 import TypingIndicator from "./TypingIndicator";
+import {
+  useChatMessages,
+  useTypingEvents,
+  type TypingEvent,
+} from "../hooks/realtimeHooks";
 
 const MSG_GROUP_TIME = 2 * 60 * 1000;
 const TYPING_DELAY = 1000;
@@ -90,16 +93,9 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
     return () => container.removeEventListener("scroll", handleScroll);
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
-  // Subscribe to Ably events
-  useEffect(() => {
-    if (!chatId || !user?.id) return;
-
-    const ably = new Ably.Realtime(import.meta.env.VITE_ABLY_API_KEY!);
-    const channel = ably.channels.get(`chat-${chatId}`);
-
-    const onNewMessage = (msg: AblyMessage) => {
-      const newMessage = msg.data as MessageDetail;
-
+  // Live messages and typing for this conversation, over the shared socket.
+  const onNewMessage = useCallback(
+    (newMessage: MessageDetail) => {
       queryClient.setQueryData<
         InfiniteData<{ messages: MessageDetail[]; nextCursor: string | null }>
       >(["messages", chatId], (oldData) => {
@@ -109,8 +105,11 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
         const lastPageIndex = pages.length - 1;
         const lastPage = pages[lastPageIndex];
 
-        const alreadyExists = lastPage.messages.some(
-          (m) => m.id === newMessage.id
+        // De-duplicate across every loaded page, not just the last one: a
+        // message could already be present from the refetch that follows a
+        // send, and checking one page let it render twice.
+        const alreadyExists = pages.some((page) =>
+          page.messages.some((m) => m.id === newMessage.id)
         );
         if (alreadyExists) return oldData;
 
@@ -134,13 +133,14 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
           bottomRef.current?.scrollIntoView({ behavior: "smooth" });
         });
       }
-    };
+    },
+    [bottomRef, chatId, queryClient]
+  );
 
-    const onTyping = (msg: AblyMessage) => {
-      const { typing, userId: senderId, userName } = msg.data || {};
-
+  const onTyping = useCallback(
+    ({ typing, userId: senderId, userName }: TypingEvent) => {
       // Ignore self
-      if (!senderId || senderId === user.id) return;
+      if (!senderId || senderId === user?.id) return;
 
       setTypingUsers((prev) => {
         const updated = new Set(prev);
@@ -169,27 +169,23 @@ const ChatArea: FC<ChatAreaProps> = ({ chatId, bottomRef, scrollToBottom }) => {
       } else {
         delete typingTimeouts.current[senderId];
       }
-    };
+    },
+    [user?.id]
+  );
 
-    // Subscribe to Ably events
-    channel.subscribe("message", onNewMessage);
-    channel.subscribe("typing", onTyping);
+  useChatMessages(chatId, onNewMessage, Boolean(chatId && user?.id));
+  useTypingEvents(chatId, onTyping, Boolean(chatId && user?.id));
 
-    // Cleanup
+  // Drop any pending typing timers when the conversation changes.
+  useEffect(() => {
+    const timeouts = typingTimeouts.current;
+    const refresh = typingTimeoutRef.current;
     return () => {
-      channel.unsubscribe("message", onNewMessage);
-      channel.unsubscribe("typing", onTyping);
-      ably.close();
-
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-
-      // Clear all typing timeouts
-      Object.values(typingTimeouts.current).forEach(clearTimeout);
-      typingTimeouts.current = {};
+      if (refresh) clearTimeout(refresh);
+      Object.values(timeouts).forEach(clearTimeout);
+      setTypingUsers(new Set());
     };
-  }, [chatId, user?.id, queryClient, bottomRef, containerRef, setTypingUsers]);
+  }, [chatId]);
 
   useEffect(() => {
     isInitialLoadRef.current = true;

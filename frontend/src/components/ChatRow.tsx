@@ -1,14 +1,13 @@
-import { FC, useState, useRef, useEffect } from "react";
+import { FC, useState, useRef, useEffect, useCallback } from "react";
 import { Check, MoreVertical, Trash2 } from "lucide-react";
 import { useDeleteChat } from "../hooks/chatHooks";
 import { toast } from "react-hot-toast";
 import { AxiosError } from "axios";
 import ConfirmDialog from "./ConfirmDialog";
-import Ably from "ably";
-import type { Message as AblyMessage } from "ably";
 import { useMyDetails } from "../hooks/userHooks";
 import { ChatPreview } from "../types/chat";
 import TypingIndicator from "./TypingIndicator";
+import { useTypingEvents, type TypingEvent } from "../hooks/realtimeHooks";
 
 const TYPING_DELAY = 1000;
 
@@ -51,7 +50,6 @@ const ChatRow: FC<ChatRowProps> = ({
   const [isTyping, setIsTyping] = useState(false);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
-  const ablyRef = useRef<Ably.Realtime | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const handleConfirm = () => {
@@ -70,44 +68,65 @@ const ChatRow: FC<ChatRowProps> = ({
     setShowMenu(false);
   };
 
-  useEffect(() => {
-    ablyRef.current = new Ably.Realtime(import.meta.env.VITE_ABLY_API_KEY!);
-    const channel = ablyRef.current.channels.get(`chat-${chatId}`);
-    const handleTyping = (msg: AblyMessage) => {
-      const { userId: senderId, userName } = msg.data || {};
+  // Typing for this row, read off the one shared socket. Each row used to open
+  // a realtime connection of its own, so a sidebar of N chats held N sockets.
+  const handleTyping = useCallback(
+    ({ userId: senderId, userName, typing }: TypingEvent) => {
       if (senderId === user?.id || !userName) return;
+
       if (isGroup) {
-        setTypingUsers((prev) => {
-          const set = new Set(prev);
-          set.add(userName);
-          return Array.from(set);
-        });
+        if (!typing) {
+          setTypingUsers((prev) => prev.filter((name) => name !== userName));
+          if (typingTimeouts.current[senderId]) {
+            clearTimeout(typingTimeouts.current[senderId]);
+            delete typingTimeouts.current[senderId];
+          }
+          return;
+        }
+
+        setTypingUsers((prev) => Array.from(new Set([...prev, userName])));
 
         if (typingTimeouts.current[senderId]) {
           clearTimeout(typingTimeouts.current[senderId]);
         }
-
         typingTimeouts.current[senderId] = setTimeout(() => {
           setTypingUsers((prev) => prev.filter((name) => name !== userName));
           delete typingTimeouts.current[senderId];
         }, TYPING_DELAY);
-      } else {
-        setIsTyping(true);
-        if (typingTimeouts.current["single"])
-          clearTimeout(typingTimeouts.current["single"]);
-        typingTimeouts.current["single"] = setTimeout(() => {
-          setIsTyping(false);
-        }, TYPING_DELAY);
+        return;
       }
-    };
-    channel.subscribe("typing", handleTyping);
+
+      // A `typing: false` event used to be treated as "still typing", because
+      // the handler never read the flag — the indicator only ever cleared by
+      // timeout.
+      if (!typing) {
+        setIsTyping(false);
+        if (typingTimeouts.current.single) {
+          clearTimeout(typingTimeouts.current.single);
+          delete typingTimeouts.current.single;
+        }
+        return;
+      }
+
+      setIsTyping(true);
+      if (typingTimeouts.current.single) {
+        clearTimeout(typingTimeouts.current.single);
+      }
+      typingTimeouts.current.single = setTimeout(() => {
+        setIsTyping(false);
+      }, TYPING_DELAY);
+    },
+    [isGroup, user?.id]
+  );
+
+  useTypingEvents(chatId, handleTyping, Boolean(chatId));
+
+  useEffect(() => {
+    const timeouts = typingTimeouts.current;
     return () => {
-      channel.unsubscribe("typing", handleTyping);
-      Object.values(typingTimeouts.current).forEach(clearTimeout);
-      typingTimeouts.current = {};
-      ablyRef.current?.close();
+      Object.values(timeouts).forEach(clearTimeout);
     };
-  }, [chatId, user?.id, isGroup]);
+  }, [chatId]);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {

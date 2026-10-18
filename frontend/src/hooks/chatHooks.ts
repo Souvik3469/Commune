@@ -8,6 +8,7 @@ import {
   updateChat,
 } from "../api/chat";
 import { UpdateChatPayload } from "../types/chat";
+import { subscribeToChat } from "./realtimeHooks";
 
 export const useAllChats = () =>
   useQuery({
@@ -25,7 +26,11 @@ export const useCreateChat = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createChat,
-    onSuccess: () => {
+    onSuccess: (chat) => {
+      // The socket joined this user's chat rooms when it connected; a chat
+      // created since then has to be joined explicitly or it gets no events
+      // until the next reconnect.
+      if (chat?.id) subscribeToChat(chat.id);
       queryClient.invalidateQueries({ queryKey: ["allChats"] });
       queryClient.invalidateQueries({ queryKey: ["groupChats"] });
     },

@@ -1,12 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  sendOtp,
-  verifyOtp,
-  register,
-  login,
-  getCurrentUser,
-  logout,
-} from "../api/auth";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { sendOtp, verifyOtp, register, login, logout } from "../api/auth";
+import { disconnectSocket } from "../lib/socket";
 
 export const useRegister = () =>
   useMutation({
@@ -18,23 +12,18 @@ export const useLogin = () =>
     mutationFn: (data: { email: string; password: string }) => login(data),
   });
 
-export const useCurrentUser = () =>
-  useQuery({
-    queryKey: ["currentUser"],
-    queryFn: async () => {
-      const res = await getCurrentUser();
-      return res.data.user;
-    },
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
+// `useCurrentUser` used to live here and call `GET /auth/me`, a route the API
+// has never served. `useMyDetails` in userHooks is the one that works.
 
 export const useLogout = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: logout,
     onSuccess: () => {
-      queryClient.removeQueries({ queryKey: ["currentUser"] });
+      // The socket authenticates with the stored token; it has to go too.
+      disconnectSocket();
+      localStorage.removeItem("accessToken");
+      queryClient.clear();
     },
   });
 };
