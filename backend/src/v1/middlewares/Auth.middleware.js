@@ -1,28 +1,33 @@
-import jwt from "jsonwebtoken";
 import prisma from "../../prisma/index";
+import { userIdFromToken, bearerFromHeader } from "../utils/tokens";
+import { publicUserSelect } from "../utils/publicUser";
 
 const authMiddleware = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
+  const token = bearerFromHeader(req.headers.authorization);
+  if (!token) {
     return res.status(401).json({ message: "Unauthorized. Please log in." });
   }
-  const token = authHeader.split(" ")[1];
-  let user;
+
+  const userId = userIdFromToken(token);
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized. Invalid token." });
+  }
+
   try {
-    const decoded = jwt.verify(token, process.env.USER_ACCESS_SECRET);
-    user = await prisma.user.findUnique({
-      where: {
-        id: decoded,
-      },
+    // `select` rather than the whole row: req.user used to carry the bcrypt
+    // hash and the live password-reset code into every controller, and
+    // `myDetails` returned it to the client.
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: publicUserSelect,
     });
     if (!user) {
       return res.status(401).json({ message: "Unauthorized. User not found." });
     }
     req.user = user;
-    next();
+    return next();
   } catch (err) {
-    console.error("Unauthorized. Invalid token: ", err);
-    return res.status(401).json({ message: "Unauthorized. Invalid token." });
+    return next(err);
   }
 };
 

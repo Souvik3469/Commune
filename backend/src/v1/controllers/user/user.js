@@ -1,247 +1,313 @@
-import { PrismaClient } from "@prisma/client";
-import { customResponse } from "../../../utils/Response";
-
-import { sendEmail } from "../../utils/sendEmail";
-const prisma = new PrismaClient();
-
+import fs from "fs/promises";
 import bcrypt from "bcrypt";
-import fs from "fs";
-import path from "path";
+import crypto from "crypto";
+
+import prisma from "../../../prisma/index";
 import cloudinary from "../../utils/cloudinary";
+import { customResponse } from "../../../utils/Response";
+import { sendEmail } from "../../utils/utils";
+import { publicUser, publicUserSelect } from "../../utils/publicUser";
+
+const RESET_TTL_MS = 15 * 60 * 1000;
+const RESET_MAX_TRIES = 5;
+const MIN_PASSWORD_LENGTH = 8;
+const SEARCH_LIMIT = 25;
+
+const safeEqual = (a, b) => {
+  const left = Buffer.from(String(a ?? ""));
+  const right = Buffer.from(String(b ?? ""));
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+};
+
+const normaliseEmail = (email) => String(email || "").trim().toLowerCase();
+
+/**
+ * Loads the reset candidate for an email and says whether `code` is the live
+ * one. Returns `null` when there is nothing to reset, so callers can answer
+ * identically whether the account exists or not.
+ */
+const checkResetCode = async (email, code) => {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      resetPasswordToken: true,
+      resetPasswordExpiry: true,
+      resetPasswordTries: true,
+    },
+  });
+  if (!user || !user.resetPasswordToken || !user.resetPasswordExpiry) {
+    return { user: null, valid: false };
+  }
+  if (user.resetPasswordExpiry < new Date()) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordToken: null,
+        resetPasswordExpiry: null,
+        resetPasswordTries: 0,
+      },
+    });
+    return { user: null, valid: false };
+  }
+  if (user.resetPasswordTries >= RESET_MAX_TRIES) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordToken: null,
+        resetPasswordExpiry: null,
+        resetPasswordTries: 0,
+      },
+    });
+    return { user: null, valid: false };
+  }
+
+  const valid = safeEqual(user.resetPasswordToken, code);
+  if (!valid) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetPasswordTries: { increment: 1 } },
+    });
+  }
+  return { user, valid };
+};
 
 const userController = {
   async myDetails(req, res, next) {
     try {
-      const user = await prisma.user.findFirst({
-        where: { id: req.user.id },
-      });
-      if (!user) {
-        return res.status(404).json(customResponse(404, "User not found"));
-      }
-      res.json(customResponse(200, user));
+      // req.user is already the public projection; it used to be the whole row,
+      // password hash and live reset code included.
+      return res.json(customResponse(200, req.user));
     } catch (err) {
-      console.error("Something went wrong during fetching your details: ", err);
-      return res.status(500).json({
-        message:
-          "Something went wrong during fetching your details. Please try again later.",
-      });
+      return next(err);
     }
   },
 
   async getUserDetails(req, res, next) {
     try {
       const { userId } = req.query;
-      let user;
-      user = await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
+      if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
         select: {
+          id: true,
           name: true,
-          email: true,
           phoneNumber: true,
           profilePic: true,
           bio: true,
         },
       });
-      res.json(customResponse(200, user));
+      if (!user) {
+        return res.status(404).json(customResponse(404, "User not found"));
+      }
+      return res.json(customResponse(200, user));
     } catch (err) {
-      console.error("Something went wrong during fetching user details: ", err);
-      return res.status(500).json({
-        message:
-          "Something went wrong during fetching user details. Please try again later.",
-      });
+      return next(err);
     }
   },
 
-  async updateUser(req, res) {
+  async updateUser(req, res, next) {
+    const file = req.file;
     try {
-      const { name, email, password } = req.body;
+      const { name, password, bio, gender, phoneNumber } = req.body;
       const userId = req.user.id;
-      let profilePic;
-      if (req.file) {
-        const localPath = path.join(
-          __dirname,
-          "..",
-          "..",
-          "uploads",
-          req.file.filename
-        );
-        const uploadResult = await cloudinary.uploader.upload(localPath, {
+
+      if (password && String(password).length < MIN_PASSWORD_LENGTH) {
+        return res.status(400).json({
+          message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+        });
+      }
+
+      // Email is deliberately not updatable here. It is the login identifier
+      // and the password-reset channel, so changing it needs its own verified
+      // flow rather than a field on the profile form.
+      const data = {};
+      if (name?.trim()) data.name = name.trim();
+      if (bio !== undefined) data.bio = bio;
+      // `gender` was read into a local object but then assigned from a key that
+      // was never set, so this field could never actually be updated.
+      if (gender !== undefined) data.gender = gender;
+      if (phoneNumber !== undefined) data.phoneNumber = phoneNumber;
+      if (password) data.password = await bcrypt.hash(password, 10);
+
+      if (file) {
+        const uploadResult = await cloudinary.uploader.upload(file.path, {
           folder: "profile_pics",
         });
-        profilePic = uploadResult.secure_url;
-        fs.unlinkSync(localPath);
+        data.profilePic = uploadResult.secure_url;
       }
-      const dataToUpdate = { name, email };
-      if (password) {
-        dataToUpdate.password = await bcrypt.hash(password, 10);
+
+      if (Object.keys(data).length === 0) {
+        return res.status(400).json({ message: "Nothing to update" });
       }
-      if (profilePic) {
-        dataToUpdate.profilePic = profilePic;
-      }
+
       const updatedUser = await prisma.user.update({
         where: { id: userId },
-        data: {
-          name: dataToUpdate.name,
-          email: dataToUpdate.email,
-          password: dataToUpdate.password,
-          profilePic: dataToUpdate.profilePic,
-          gender: dataToUpdate.gender,
-        },
+        data,
+        select: publicUserSelect,
       });
+
       return res
         .status(200)
         .json({ message: "Profile updated successfully", data: updatedUser });
     } catch (err) {
-      console.error("Something went wrong during updating your profile: ", err);
-      return res.status(500).json({
-        message:
-          "Something went wrong during updating your profile. Please try again later.",
-      });
+      return next(err);
+    } finally {
+      if (file) await fs.unlink(file.path).catch(() => {});
     }
   },
 
   async searchUsers(req, res, next) {
     try {
-      const { query } = req.query;
+      const query = String(req.query.query || "").trim();
       if (!query) {
         return res.status(400).json({ error: "Search query is required" });
       }
+
       const users = await prisma.user.findMany({
         where: {
-          name: {
-            contains: query,
-            mode: "insensitive",
-          },
+          name: { contains: query, mode: "insensitive" },
+          // Searching never usefully returns yourself.
+          id: { not: req.user.id },
         },
         select: {
           id: true,
           name: true,
           email: true,
+          username: true,
           profilePic: true,
           dob: true,
         },
-        orderBy: {
-          name: "asc",
-        },
+        orderBy: { name: "asc" },
+        // The result set used to be unbounded, so a one-character query
+        // returned every matching user in the database.
+        take: SEARCH_LIMIT,
       });
-      res.json(users);
+      return res.json(users);
     } catch (err) {
-      console.error("Something went wrong during searching users: ", err);
-      return res.status(500).json({
-        message:
-          "Something went wrong during searching users. Please try again later.",
-      });
+      return next(err);
     }
   },
 
   async forgotPassword(req, res, next) {
     try {
-      const { email } = req.body;
+      const email = normaliseEmail(req.body?.email);
       if (!email) {
         return res.status(400).json({ message: "Email is required" });
       }
+
       const user = await prisma.user.findUnique({
         where: { email },
+        select: { id: true },
       });
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
+
+      // Answer the same way whether or not the account exists. A 404 here
+      // turned this endpoint into an account-enumeration oracle.
+      if (user) {
+        const resetCode = crypto.randomInt(100000, 1000000).toString();
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            resetPasswordToken: resetCode,
+            resetPasswordExpiry: new Date(Date.now() + RESET_TTL_MS),
+            resetPasswordTries: 0,
+          },
+        });
+
+        const sent = await sendEmail(
+          email,
+          "Password Reset Request",
+          `Your password reset code is ${resetCode}. The code will expire in 15 minutes`
+        );
+        if (!sent) {
+          // The mailer used to swallow its own failures, so this endpoint
+          // reported success for mail it had not sent.
+          return res.status(502).json({
+            message: "Could not send the reset email. Please try again later.",
+          });
+        }
       }
-      // const resetToken = crypto.randomBytes(32).toString("hex");
-      // const resetTokenHash = crypto
-      //   .createHash("sha256")
-      //   .update(resetToken)
-      //   .digest("hex");
-      const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const resetPasswordExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
-      await prisma.user.update({
-        where: { email },
-        data: {
-          resetPasswordToken: resetCode,
-          resetPasswordExpiry,
-        },
-      });
-      // const resetURL = `${process.env.DEV_URL2}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
-      // Send the email
-      await sendEmail(
-        email,
-        "Password Reset Request",
-        // `
-        //   <p>You requested a password reset.</p>
-        //   <p>Click the link below to reset your password:</p>
-        //   <a href="${resetURL}">${resetURL}</a>
-        //   <p>This link will expire in 15 minutes.</p>
-        // `
-        `Your password reset code is ${resetCode}. The code will expire in 15 minutes`
-      );
-      return res.status(200).json({ message: "Password reset email sent" });
-    } catch (err) {
-      console.error("Something went wrong during forgot password: ", err);
-      return res.status(500).json({
+
+      return res.status(200).json({
         message:
-          "Something went wrong during forgot password. Please try again later.",
+          "If an account exists for that address, a reset code has been sent.",
       });
+    } catch (err) {
+      return next(err);
     }
   },
 
-  async verifyResetCode(req, res) {
+  async verifyResetCode(req, res, next) {
     try {
-      const { email, resetCode } = req.body;
-      const user = await prisma.user.findUnique({
-        where: { email },
-      });
-      if (
-        !user ||
-        user.resetPasswordToken !== resetCode ||
-        user.resetPasswordExpiry < new Date()
-      ) {
+      const email = normaliseEmail(req.body?.email);
+      const { resetCode } = req.body || {};
+      if (!email || !resetCode) {
         return res
           .status(400)
           .json({ message: "Invalid or expired reset code" });
       }
-      res.status(200).json({ message: "Code verified successfully" });
-    } catch (err) {
-      console.error("Something went wrong during verifying code: ", err);
-      return res.status(500).json({
-        message:
-          "Something went wrong during verifying code. Please try again later.",
-      });
-    }
-  },
 
-  async resetPassword(req, res) {
-    try {
-      const { email, newPassword } = req.body;
-      const user = await prisma.user.findUnique({
-        where: { email },
-      });
-      if (
-        !user ||
-        !user.resetPasswordToken ||
-        user.resetPasswordExpiry < new Date()
-      ) {
+      const { valid } = await checkResetCode(email, resetCode);
+      if (!valid) {
         return res
           .status(400)
           .json({ message: "Invalid or expired reset code" });
       }
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      return res.status(200).json({ message: "Code verified successfully" });
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  /**
+   * The reset code is checked here too. This handler used to accept
+   * `{ email, newPassword }` and only assert that *some* unexpired reset code
+   * existed on the account — it never compared the caller's code against it, so
+   * anyone who knew an email address that had requested a reset could set that
+   * account's password without ever seeing the code.
+   */
+  async resetPassword(req, res, next) {
+    try {
+      const email = normaliseEmail(req.body?.email);
+      const { resetCode, newPassword } = req.body || {};
+
+      if (!email || !resetCode || !newPassword) {
+        return res
+          .status(400)
+          .json({ message: "Email, reset code and new password are required" });
+      }
+      if (String(newPassword).length < MIN_PASSWORD_LENGTH) {
+        return res.status(400).json({
+          message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+        });
+      }
+
+      const { user, valid } = await checkResetCode(email, resetCode);
+      if (!user || !valid) {
+        return res
+          .status(400)
+          .json({ message: "Invalid or expired reset code" });
+      }
+
       await prisma.user.update({
-        where: { email },
+        where: { id: user.id },
         data: {
-          password: hashedPassword,
+          password: await bcrypt.hash(newPassword, 10),
           resetPasswordToken: null,
           resetPasswordExpiry: null,
+          resetPasswordTries: 0,
         },
       });
-      res.status(200).json({ message: "Password reset successful" });
+
+      return res.status(200).json({ message: "Password reset successful" });
     } catch (err) {
-      console.error("Something went wrong during resetting password: ", err);
-      return res.status(500).json({
-        message:
-          "Something went wrong during resetting password. Please try again later.",
-      });
+      return next(err);
     }
   },
 };
+
+export { publicUser };
 export default userController;
