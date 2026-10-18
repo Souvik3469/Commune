@@ -54,8 +54,10 @@ export const updateChat = async (
   const formData = new FormData();
   if (data.name) formData.append("name", data.name);
   if (data.logo) formData.append("logo", data.logo);
-  data.addUserIds?.forEach((id) => formData.append("addUserIds[]", id));
-  data.removeUserIds?.forEach((id) => formData.append("removeUserIds[]", id));
+  // multer does not expand bracket notation, so `addUserIds[]` arrived at the
+  // server as a key it never read and member changes silently did nothing.
+  data.addUserIds?.forEach((id) => formData.append("addUserIds", id));
+  data.removeUserIds?.forEach((id) => formData.append("removeUserIds", id));
   const res = await api.patch(`/chat/${chatId}/update`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });

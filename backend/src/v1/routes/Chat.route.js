@@ -5,54 +5,29 @@ import upload from "../middlewares/upload";
 
 const router = express.Router();
 
-router.post(
-  "/create",
-  authMiddleware,
-  upload.single("logo"),
-  chatController.createChat
-);
-router.put(
-  "/update/:chatId",
-  authMiddleware,
-  upload.single("logo"),
-  chatController.updateGroupChat
-);
-router.get("/get-chats", authMiddleware, chatController.getChats);
-router.get("/get-rooms", authMiddleware, chatController.getRooms);
-router.delete("/:chatId", authMiddleware, chatController.deleteChat);
-router.post("/send", authMiddleware, chatController.createMessage);
-router.get(
-  "/:chatId/messages",
-  authMiddleware,
-  chatController.getMessagesByChat
-);
-router.get("/:chatId/unread", authMiddleware, chatController.getUnreadMessages);
-router.put(
-  "/:chatId/status",
-  authMiddleware,
-  chatController.updateMessageStatus
-);
+router.use(authMiddleware);
+
+router.post("/create", upload.single("logo"), chatController.createChat);
+router.get("/get-chats", chatController.getChats);
+router.get("/get-rooms", chatController.getRooms);
+router.post("/send", chatController.createMessage);
+router.post("/accept-invite/:inviteToken", chatController.acceptInviteLink);
+
+// `PUT /update/:chatId` used to exist alongside this and map to the same
+// handler; the duplicate has been dropped.
 router.patch(
   "/:chatId/update",
-  authMiddleware,
   upload.single("logo"),
   chatController.updateGroupChat
 );
-router.patch(
-  "/:chatId/remove-members",
-  authMiddleware,
-  chatController.removeGroupMembers
-);
-router.post(
-  "/:chatId/invite-link",
-  authMiddleware,
-  chatController.generateInvite
-);
-router.post(
-  "/accept-invite/:inviteToken",
-  authMiddleware,
-  chatController.acceptInviteLink
-);
-router.get("/:chatId", authMiddleware, chatController.getChatById);
+router.get("/:chatId/messages", chatController.getMessagesByChat);
+router.get("/:chatId/unread", chatController.getUnreadMessages);
+router.put("/:chatId/status", chatController.updateMessageStatus);
+router.patch("/:chatId/remove-members", chatController.removeGroupMembers);
+router.post("/:chatId/invite-link", chatController.generateInvite);
+router.delete("/:chatId", chatController.deleteChat);
+
+// Keep the catch-all id route last so it cannot shadow the paths above.
+router.get("/:chatId", chatController.getChatById);
 
 export default router;
