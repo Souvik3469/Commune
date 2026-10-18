@@ -1,101 +1,128 @@
 // schema.prisma
 
 generator client {
-    provider        = "prisma-client-js"
-    previewFeatures = ["omitApi"]
+  provider        = "prisma-client-js"
+  previewFeatures = ["omitApi"]
 }
 
 datasource db {
-    provider = "mongodb"
-    url      = env("DATABASE_URL")
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-    id                  String              @id @default(auto()) @map("_id") @db.ObjectId
-    name                String
-    email               String              @unique
-    username            String?
-    password            String
-    gender              String?
-    googleId            String?
-    dob                 DateTime?
-    active              Boolean             @default(false)
-    createdAt           DateTime            @default(now())
-    bio                 String?
-    profilePic          String?
-    updatedAt           DateTime            @updatedAt
-    messages            Message[]
-    phoneNumber         String?
-    chats               Chat[]              @relation(fields: [chatIds], references: [id])
-    chatIds             String[]            @db.ObjectId
-    groupChats          Chat[]              @relation("GroupChats")
-    MessageReadStatus   MessageReadStatus[]
-    resetPasswordToken  String?
-    resetPasswordExpiry DateTime?
-    deletedChats        DeletedChat[]
+  id                  String              @id @default(auto()) @map("_id") @db.ObjectId
+  name                String
+  email               String              @unique
+  username            String?             @unique
+  password            String
+  gender              String?
+  googleId            String?
+  dob                 DateTime?
+  active              Boolean             @default(false)
+  createdAt           DateTime            @default(now())
+  bio                 String?
+  profilePic          String?
+  updatedAt           DateTime            @updatedAt
+  messages            Message[]
+  phoneNumber         String?
+  chats               Chat[]              @relation(fields: [chatIds], references: [id])
+  chatIds             String[]            @db.ObjectId
+  groupChats          Chat[]              @relation("GroupChats")
+  MessageReadStatus   MessageReadStatus[]
+  resetPasswordToken  String?
+  resetPasswordExpiry DateTime?
+  resetPasswordTries  Int                 @default(0)
+  deletedChats        DeletedChat[]
+
+  // `searchUsers` filters on name; `register` counted by name to mint a username.
+  @@index([name])
 }
 
 model DeletedChat {
-    id        String   @id @default(auto()) @map("_id") @db.ObjectId
-    userId    String   @db.ObjectId
-    chatId    String   @db.ObjectId
-    deletedAt DateTime
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  chatId    String   @db.ObjectId
+  deletedAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
-    @@unique([userId, chatId])
+  @@unique([userId, chatId])
+  @@index([chatId])
 }
 
 model Chat {
-    id           String        @id @default(auto()) @map("_id") @db.ObjectId
-    name         String?
-    isGroup      Boolean?      @default(false)
-    logo         String?
-    adminId      String?       @db.ObjectId
-    admin        User?         @relation("GroupChats", fields: [adminId], references: [id])
-    messagesIds  String[]      @db.ObjectId
-    messages     Message[]
-    lastModified DateTime
-    inviteTokens InviteToken[]
-    userIds      String[]      @db.ObjectId
-    users        User[]        @relation(fields: [userIds], references: [id])
-    deletedChats DeletedChat[]
+  id           String        @id @default(auto()) @map("_id") @db.ObjectId
+  name         String?
+  isGroup      Boolean?      @default(false)
+  logo         String?
+  adminId      String?       @db.ObjectId
+  admin        User?         @relation("GroupChats", fields: [adminId], references: [id])
+  messagesIds  String[]      @db.ObjectId
+  messages     Message[]
+  lastModified DateTime
+  inviteTokens InviteToken[]
+  userIds      String[]      @db.ObjectId
+  users        User[]        @relation(fields: [userIds], references: [id])
+  deletedChats DeletedChat[]
+
+  // getChats / getRooms: filter on (isGroup, userIds has me) then sort by lastModified.
+  // userIds is an array, so this is a multikey index on MongoDB.
+  @@index([userIds, isGroup, lastModified(sort: Desc)])
 }
 
 model Message {
-    id                String              @id @default(auto()) @map("_id") @db.ObjectId
-    content           String
-    type              String              @default("text")
-    timestamp         DateTime            @default(now())
-    logo              String?
-    chatId            String              @db.ObjectId
-    senderId          String              @db.ObjectId
-    sender            User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
-    chat              Chat                @relation(fields: [chatId], references: [id], onDelete: Cascade)
-    MessageReadStatus MessageReadStatus[]
+  id                String              @id @default(auto()) @map("_id") @db.ObjectId
+  content           String
+  type              String              @default("text")
+  fileUrl           String?
+  timestamp         DateTime            @default(now())
+  logo              String?
+  chatId            String              @db.ObjectId
+  senderId          String              @db.ObjectId
+  sender            User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  chat              Chat                @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  MessageReadStatus MessageReadStatus[]
+
+  // The hot path: getMessagesByChat pages (chatId, timestamp desc).
+  // `id` is the tie-breaker the compound cursor needs.
+  @@index([chatId, timestamp(sort: Desc), id(sort: Desc)])
+  @@index([senderId])
 }
 
 model MessageReadStatus {
-    id        String    @id @default(auto()) @map("_id") @db.ObjectId
-    messageId String    @db.ObjectId
-    userId    String    @db.ObjectId
-    readAt    DateTime? // Null if unread, timestamp if read
-    message   Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
-    user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  messageId String    @db.ObjectId
+  userId    String    @db.ObjectId
+  readAt    DateTime? // Null if unread, timestamp if read
+  message   Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // One row per (message, reader). Without this, re-marking a chat as read
+  // inserts duplicates and the unread count drifts.
+  @@unique([messageId, userId])
+  @@index([userId])
 }
 
 model InviteToken {
-    id        String   @id @default(auto()) @map("_id") @db.ObjectId
-    token     String   @unique
-    chatId    String
-    chat      Chat     @relation(fields: [chatId], references: [id])
-    expiresAt DateTime
-    createdAt DateTime @default(now())
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  token     String    @unique
+  chatId    String    @db.ObjectId
+  chat      Chat      @relation(fields: [chatId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?
+
+  @@index([chatId])
 }
 
 model Otp {
-    id        String   @id @default(auto()) @map("_id") @db.ObjectId
-    email     String
-    otp       String
-    createdAt DateTime @default(now())
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String
+  otp       String
+  tries     Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
 }
