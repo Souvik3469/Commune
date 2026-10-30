@@ -47,7 +47,7 @@ Not declared unique on `(messageId, userId)`, so duplicate rows are possible.
 ### `DeletedChat`
 The per-user deletion watermark. `@@unique([userId, chatId])`, with `deletedAt` as the cutoff.
 Reads filter to `timestamp > deletedAt`. This is the best-designed piece of the schema — 
-`deep-dive.html` §3 for why.
+`commune-deep-dive.html` §3 for why.
 
 ### `InviteToken`
 `token` unique, `chatId`, `expiresAt`. Note `chatId` here is a plain `String`, not `@db.ObjectId`,

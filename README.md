@@ -33,7 +33,7 @@ kept deliberately rather than overwritten.
 
 | Doc | What's in it |
 |---|---|
-| [`docs/deep-dive.html`](docs/deep-dive.html) | The original HLD/LLD walkthrough — the two-transport realtime split, the message pipeline, cursor pagination, the `DeletedChat` watermark, WebRTC signalling, and a "what I'd do differently" section. Open in a browser. |
+| [`docs/commune-deep-dive.html`](docs/commune-deep-dive.html) | The original HLD/LLD walkthrough — the two-transport realtime split, the message pipeline, cursor pagination, the `DeletedChat` watermark, WebRTC signalling, and a "what I'd do differently" section. Open in a browser. |
 | [`docs/api-contract.md`](docs/api-contract.md) | The original REST contract. |
 | [`docs/db-schema.md`](docs/db-schema.md) | The original seven models, their relations, and the indexes that were missing. |
 

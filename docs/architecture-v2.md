@@ -1,6 +1,6 @@
 # Commune — Architecture (v2)
 
-**Supersedes `deep-dive.html` for anything that changed.** The original deep dive is still the
+**Supersedes `commune-deep-dive.html` for anything that changed.** The original deep dive is still the
 accurate description of the system *as it was built*, including its reasoning, and it is kept
 deliberately — this document records what the system looks like after the October 2026 correctness
 and design pass, and why each change was made.
@@ -9,7 +9,7 @@ Read alongside:
 
 | Doc | What it is |
 |---|---|
-| [`deep-dive.html`](deep-dive.html) | The original HLD/LLD walkthrough. Historical. |
+| [`commune-deep-dive.html`](commune-deep-dive.html) | The original HLD/LLD walkthrough. Historical. |
 | [`api-contract.md`](api-contract.md) | The original REST contract. Historical. |
 | [`db-schema.md`](db-schema.md) | The original schema, including its missing indexes. Historical. |
 | [`api-contract-v2.md`](api-contract-v2.md) | The current REST and socket contract. |

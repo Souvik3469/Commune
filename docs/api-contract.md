@@ -3,10 +3,10 @@
 Reconstructed from `backend/src/v1/routes/` and the controllers behind them. Base path: `/v1`.
 
 **Auth:** `Authorization: Bearer <jwt>` on every route marked 🔒. The token payload is the bare user
-id string (not a claims object) — see `deep-dive.html` §2.
+id string (not a claims object) — see `commune-deep-dive.html` §2.
 
 **Realtime is not documented here.** Message fan-out goes over Ably channels (`chat-{chatId}`) and
-call signalling over Socket.IO — see `deep-dive.html` §5 and §6.
+call signalling over Socket.IO — see `commune-deep-dive.html` §5 and §6.
 
 ---
 
