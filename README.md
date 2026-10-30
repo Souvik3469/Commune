@@ -28,6 +28,8 @@ kept deliberately rather than overwritten.
 | [`docs/api-contract-v2.md`](docs/api-contract-v2.md) | Current REST and socket contract, with breaking changes marked. |
 | [`docs/db-schema-v2.md`](docs/db-schema-v2.md) | Current schema, its indexes, and the constraints added. |
 | [`docs/migration-notes.md`](docs/migration-notes.md) | What has to happen to a live database and environment before deploying. |
+| [`docs/commune-flaws.md`](docs/commune-flaws.md) | The audit the v2 pass was written against — 23 defects, severity-ordered, nothing changed at the time. |
+| [`docs/commune-flaws-fixed.md`](docs/commune-flaws-fixed.md) | What was actually done about each, plus 14 further defects that surfaced while fixing them — four worse than anything in the audit. |
 
 **Historical — the system as originally built**
 
